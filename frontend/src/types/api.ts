@@ -1,4 +1,4 @@
-// Enhanced TypeScript interfaces for content viewing and full site scraping
+// Core API types for the web scraper application
 
 export interface ScrapeRequest {
   url: string;
@@ -9,6 +9,8 @@ export interface ScrapeRequest {
   scrape_whole_site: boolean;
   download_content: boolean;
   content_types: ContentType[];
+  depth_limit?: number;
+  respect_robots?: boolean;
 }
 
 export interface ContentType {
@@ -21,7 +23,7 @@ export interface ContentType {
 
 export interface ScrapedContent {
   url: string;
-  content_type: 'text' | 'image' | 'pdf' | 'document' | 'video' | 'other';
+  content_type: 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio' | 'other';
   file_path?: string;
   file_size?: number;
   mime_type?: string;
@@ -36,7 +38,7 @@ export interface ScrapedContent {
 
 export interface ScrapeStatus {
   session_id: string;
-  status: 'running' | 'completed' | 'error' | 'stopped';
+  status: 'running' | 'completed' | 'error' | 'stopped' | 'paused';
   current_url?: string;
   pages_scraped: number;
   urls_found: number;
@@ -46,6 +48,7 @@ export interface ScrapeStatus {
   started_at: string;
   ended_at?: string;
   estimated_total_pages?: number;
+  estimated_completion_time?: string;
 }
 
 export interface ScrapeResult {
@@ -62,15 +65,21 @@ export interface ScrapeResult {
     total_file_size: number;
     duration_seconds: number;
     content_by_type: Record<string, number>;
+    success_rate: number;
+    average_page_size: number;
   };
   status: ScrapeStatus;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface WebSocketMessage {
-  type: 'connection_established' | 'status_update' | 'scrape_complete' | 'error' | 'content_downloaded';
-  data?: any;
-  message?: string;
-  session_id?: string;
+export interface ScrapeSession {
+  id: string;
+  config: ScrapeRequest;
+  status: ScrapeStatus;
+  result?: ScrapeResult;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SessionsResponse {
@@ -82,15 +91,38 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  message?: string;
 }
 
-// Content viewer types
-export interface ContentViewerProps {
-  content: ScrapedContent;
-  onClose: () => void;
+export interface HealthCheckResponse {
+  status: string;
+  crawl4ai_available: boolean;
+  active_sessions: number;
+  version: string;
+  uptime: number;
 }
 
-export interface ContentGalleryProps {
-  content: ScrapedContent[];
-  contentType: string;
+// Validation types
+export interface ValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings?: string[];
+}
+
+export interface FormErrors {
+  url?: string;
+  max_pages?: string;
+  delay?: string;
+  content_types?: string;
+  general?: string;
+}
+
+// Export types
+export type ExportFormat = 'json' | 'csv' | 'zip';
+
+export interface ExportOptions {
+  format: ExportFormat;
+  include_content: boolean;
+  include_metadata: boolean;
+  include_statistics: boolean;
 }
