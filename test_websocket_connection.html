@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .log {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            margin: 20px 0;
+            font-family: monospace;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <p>This page tests the WebSocket connection to the backend server.</p>
+    
+    <div>
+        <input type="text" id="urlInput" placeholder="Enter URL to scrape" value="https://example.com">
+        <button onclick="testConnection()">Test WebSocket Connection</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <div id="log" class="log"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function testConnection() {
+            const url = document.getElementById('urlInput').value;
+            const sessionId = 'test-' + Date.now();
+            
+            log(`Starting WebSocket test with session ID: ${sessionId}`, 'info');
+            
+            // Create WebSocket connection
+            const wsUrl = `ws://localhost:8000/ws/scrape/${sessionId}`;
+            log(`Connecting to: ${wsUrl}`, 'info');
+            
+            const ws = new WebSocket(wsUrl);
+            
+            // Set timeout for connection
+            const timeout = setTimeout(() => {
+                log('Connection timeout after 10 seconds', 'error');
+                ws.close();
+            }, 10000);
+            
+            ws.onopen = (event) => {
+                clearTimeout(timeout);
+                log('✅ WebSocket connection established!', 'success');
+                
+                // Send test request
+                const testRequest = {
+                    url: url,
+                    max_pages: 1,
+                    delay: 0.5,
+                    include_external: false,
+                    scrape_whole_site: false,
+                    download_content: false,
+                    content_types: []
+                };
+                
+                log(`Sending test request: ${JSON.stringify(testRequest, null, 2)}`, 'info');
+                ws.send(JSON.stringify(testRequest));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`📥 Received message type: ${data.type}`, 'success');
+                    
+                    if (data.type === 'connection_established') {
+                        log('🔗 Server confirmed connection!', 'success');
+                    } else if (data.type === 'status_update') {
+                        log(`📊 Status: ${data.data.status}, Progress: ${data.data.progress}%`, 'info');
+                    } else if (data.type === 'scrape_complete') {
+                        log('🎉 Scraping completed successfully!', 'success');
+                        log(`Results: ${data.data.statistics.total_pages_scraped} pages, ${data.data.statistics.total_urls_found} URLs found`, 'success');
+                    } else if (data.type === 'error') {
+                        log(`❌ Error: ${data.message}`, 'error');
+                    } else {
+                        log(`📄 Message data: ${JSON.stringify(data, null, 2)}`, 'info');
+                    }
+                } catch (e) {
+                    log(`❌ Error parsing message: ${e}`, 'error');
+                    log(`Raw message: ${event.data}`, 'info');
+                }
+            };
+            
+            ws.onclose = (event) => {
+                clearTimeout(timeout);
+                log(`🔌 WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`, 'info');
+            };
+            
+            ws.onerror = (error) => {
+                clearTimeout(timeout);
+                log(`❌ WebSocket error: ${error}`, 'error');
+            };
+        }
+
+        // Auto-test on page load
+        window.onload = () => {
+            log('WebSocket test page loaded. Click "Test WebSocket Connection" to start.', 'info');
+        };
+    </script>
+</body>
+</html>

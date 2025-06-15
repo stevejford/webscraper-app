@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 20px; margin: 5px; font-size: 16px; }
+        input { padding: 8px; margin: 5px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Connection Debug</h1>
+    
+    <div>
+        <input type="text" id="urlInput" value="https://httpbin.org/html" placeholder="URL to scrape">
+        <button onclick="testFrontendWebSocket()">Test Frontend WebSocket</button>
+        <button onclick="testDirectWebSocket()">Test Direct WebSocket</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <div id="logs"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logs.appendChild(div);
+            console.log(message);
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        // Test the exact same way the frontend does it
+        function testFrontendWebSocket() {
+            log('🧪 Testing Frontend WebSocket Connection...', 'info');
+            
+            const sessionId = crypto.randomUUID();
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = 'localhost';
+            const port = '8000';
+            const wsUrl = `${protocol}//${host}:${port}/ws/scrape/${sessionId}`;
+            
+            log(`🔌 Frontend connecting to: ${wsUrl}`, 'info');
+            log(`📍 Current page: ${window.location.href}`, 'info');
+            log(`🌐 Protocol: ${protocol}, Host: ${host}, Port: ${port}`, 'info');
+            
+            const ws = new WebSocket(wsUrl);
+            
+            const timeout = setTimeout(() => {
+                log('⏰ Frontend connection timeout (10s)', 'error');
+                ws.close();
+            }, 10000);
+            
+            ws.onopen = (event) => {
+                clearTimeout(timeout);
+                log('✅ Frontend WebSocket opened!', 'success');
+                
+                // Send the same request format as frontend
+                const testRequest = {
+                    url: document.getElementById('urlInput').value,
+                    max_pages: 1,
+                    delay: 0.5,
+                    include_external: false,
+                    scrape_whole_site: false,
+                    download_content: false,
+                    content_types: []
+                };
+                
+                log(`📤 Frontend sending: ${JSON.stringify(testRequest, null, 2)}`, 'info');
+                ws.send(JSON.stringify(testRequest));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    log(`📥 Frontend received: ${JSON.stringify(message, null, 2)}`, 'success');
+                } catch (e) {
+                    log(`❌ Frontend parse error: ${e}`, 'error');
+                    log(`Raw: ${event.data}`, 'info');
+                }
+            };
+            
+            ws.onclose = (event) => {
+                clearTimeout(timeout);
+                log(`🔌 Frontend closed. Code: ${event.code}, Reason: ${event.reason || 'No reason'}`, 'info');
+            };
+            
+            ws.onerror = (error) => {
+                clearTimeout(timeout);
+                log(`❌ Frontend error: ${error}`, 'error');
+                log(`❌ Frontend error type: ${error.type}`, 'error');
+                log(`❌ Frontend WebSocket state: ${ws.readyState}`, 'error');
+                log(`❌ Frontend WebSocket URL: ${ws.url}`, 'error');
+            };
+        }
+
+        // Test direct connection
+        function testDirectWebSocket() {
+            log('🔧 Testing Direct WebSocket Connection...', 'info');
+            
+            const sessionId = 'direct-test-' + Date.now();
+            const wsUrl = `ws://localhost:8000/ws/scrape/${sessionId}`;
+            
+            log(`🔌 Direct connecting to: ${wsUrl}`, 'info');
+            
+            const ws = new WebSocket(wsUrl);
+            
+            const timeout = setTimeout(() => {
+                log('⏰ Direct connection timeout (10s)', 'error');
+                ws.close();
+            }, 10000);
+            
+            ws.onopen = (event) => {
+                clearTimeout(timeout);
+                log('✅ Direct WebSocket opened!', 'success');
+                
+                const testRequest = {
+                    url: document.getElementById('urlInput').value,
+                    max_pages: 1,
+                    delay: 0.5,
+                    include_external: false,
+                    scrape_whole_site: false,
+                    download_content: false,
+                    content_types: []
+                };
+                
+                log(`📤 Direct sending: ${JSON.stringify(testRequest, null, 2)}`, 'info');
+                ws.send(JSON.stringify(testRequest));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    log(`📥 Direct received: ${JSON.stringify(message, null, 2)}`, 'success');
+                } catch (e) {
+                    log(`❌ Direct parse error: ${e}`, 'error');
+                    log(`Raw: ${event.data}`, 'info');
+                }
+            };
+            
+            ws.onclose = (event) => {
+                clearTimeout(timeout);
+                log(`🔌 Direct closed. Code: ${event.code}, Reason: ${event.reason || 'No reason'}`, 'info');
+            };
+            
+            ws.onerror = (error) => {
+                clearTimeout(timeout);
+                log(`❌ Direct error: ${error}`, 'error');
+                log(`❌ Direct error type: ${error.type}`, 'error');
+                log(`❌ Direct WebSocket state: ${ws.readyState}`, 'error');
+                log(`❌ Direct WebSocket URL: ${ws.url}`, 'error');
+            };
+        }
+
+        // Auto-run on page load
+        window.onload = () => {
+            log('🚀 WebSocket debug page loaded. Test both connection methods.', 'info');
+        };
+    </script>
+</body>
+</html>
