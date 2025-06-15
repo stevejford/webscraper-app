@@ -1,58 +1,166 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useScrapeStore } from '../store/scrapeStore';
+import { useConnectionStore } from '../store/connectionStore';
 import { ScrapeRequest, WebSocketMessage } from '../types';
+import { websocketService, ConnectionState } from '../services/websocket';
 
 export const useWebSocket = () => {
   const {
-    websocket,
-    setWebSocket,
-    setIsConnected,
     setCurrentSession,
     updateSessionStatus,
     addSession,
     setIsSubmitting
   } = useScrapeStore();
 
-  const connectWebSocket = useCallback((sessionId: string) => {
-    // Get the correct backend URL
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Always use localhost for development
-    const host = 'localhost';
-    const port = '8000'; // Backend port
-    const wsUrl = `${protocol}//${host}:${port}/ws/scrape/${sessionId}`;
-    
-    // Log frontend port for debugging
-    console.log(`Frontend running on port: ${window.location.port || '80'}`);
-    
-    console.log(`Connecting to WebSocket at ${wsUrl}`);
-    console.log('WebSocket readyState constants:', {
-      CONNECTING: WebSocket.CONNECTING,
-      OPEN: WebSocket.OPEN,
-      CLOSING: WebSocket.CLOSING,
-      CLOSED: WebSocket.CLOSED
-    });
-    const ws = new WebSocket(wsUrl);
-    console.log('WebSocket created, initial readyState:', ws.readyState);
-    
-    // Set a connection timeout
-    const connectionTimeout = setTimeout(() => {
-      if (ws.readyState !== WebSocket.OPEN) {
-        console.error('WebSocket connection timeout');
-        ws.close();
-      }
-    }, 10000); // Increased timeout to 10 seconds
-    
-    ws.onopen = () => {
-      console.log('WebSocket connected successfully');
-      clearTimeout(connectionTimeout);
-      setIsConnected(true);
-      setWebSocket(ws);
-    };
-    
-    ws.onmessage = (event) => {
-      try {
-        const message: WebSocketMessage = JSON.parse(event.data);
-        console.log('WebSocket message received:', message.type);
+  const {
+    updateConnectionState,
+    setSessionId,
+    setQueuedMessages,
+    setLatency,
+    setError,
+    incrementReconnectAttempts,
+    resetReconnectAttempts,
+    recordConnection,
+    recordReconnection,
+    recordError,
+    addNotification
+  } = useConnectionStore();
+
+  const connectionStartTime = useRef<number | null>(null);
+
+  const handleConnectionStateChange = useCallback((state: ConnectionState) => {
+    updateConnectionState(state);
+
+    // Calculate latency for connection
+    if (state === 'connected' && connectionStartTime.current) {
+      const latency = Date.now() - connectionStartTime.current;
+      setLatency(latency);
+      connectionStartTime.current = null;
+    }
+
+    // Handle state-specific actions
+    switch (state) {
+      case 'connecting':
+        connectionStartTime.current = Date.now();
+        setError(null);
+        addNotification('info', 'Connecting to server...');
+        break;
+
+      case 'connected':
+        resetReconnectAttempts();
+        recordConnection();
+        setError(null);
+        addNotification('success', 'Connected successfully!');
+        break;
+
+      case 'reconnecting':
+        incrementReconnectAttempts();
+        addNotification('warning', 'Connection lost, attempting to reconnect...');
+        break;
+
+      case 'disconnected':
+        setError(null);
+        addNotification('info', 'Disconnected from server');
+        break;
+
+      case 'error':
+        recordError();
+        addNotification('error', 'Connection error occurred');
+        break;
+    }
+  }, [
+    updateConnectionState,
+    setLatency,
+    setError,
+    incrementReconnectAttempts,
+    resetReconnectAttempts,
+    recordConnection,
+    recordReconnection,
+    recordError,
+    addNotification
+  ]);
+
+  const handleMessage = useCallback((message: WebSocketMessage) => {
+    console.log('📥 Processing WebSocket message:', message.type);
+
+    switch (message.type) {
+      case 'connection_established':
+        console.log('✅ Connection established:', message.session_id);
+        if (message.session_id) {
+          setSessionId(message.session_id);
+        }
+        break;
+
+      case 'status_update':
+        if (message.data) {
+          console.log('📊 Status update:', message.data);
+          updateSessionStatus(message.data);
+        }
+        break;
+
+      case 'scrape_complete':
+        if (message.data) {
+          console.log('✅ Scrape completed:', message.data);
+          setCurrentSession(message.data);
+          addSession(message.data);
+          setIsSubmitting(false);
+          addNotification('success', 'Scraping completed successfully!');
+        }
+        break;
+
+      case 'content_downloaded':
+        if (message.data) {
+          console.log('📥 Content downloaded:', message.data);
+          // Handle individual content downloads
+          addNotification('info', `Downloaded: ${message.data.url}`);
+        }
+        break;
+
+      case 'error':
+        console.error('❌ WebSocket error from server:', message.message);
+        const errorMsg = message.message || 'Unknown error occurred';
+        setError(errorMsg);
+        addNotification('error', `Scraping error: ${errorMsg}`);
+        setIsSubmitting(false);
+        break;
+
+      default:
+        console.warn('⚠️ Unknown message type:', message.type);
+    }
+  }, [
+    setSessionId,
+    updateSessionStatus,
+    setCurrentSession,
+    addSession,
+    setIsSubmitting,
+    setError,
+    addNotification
+  ]);
+
+  const handleReconnect = useCallback(() => {
+    recordReconnection();
+    addNotification('success', 'Reconnected successfully!');
+  }, [recordReconnection, addNotification]);
+
+  const connectWebSocket = useCallback(async (sessionId: string) => {
+    try {
+      await websocketService.connect(sessionId, {
+        onMessage: handleMessage,
+        onConnectionStateChange: handleConnectionStateChange,
+        onReconnect: handleReconnect,
+        onError: (error) => {
+          console.error('❌ WebSocket error:', error);
+          setError('Connection error occurred');
+        }
+      });
+
+      return websocketService;
+    } catch (error) {
+      console.error('❌ Failed to connect WebSocket:', error);
+      setError(error instanceof Error ? error.message : 'Connection failed');
+      throw error;
+    }
+  }, [handleMessage, handleConnectionStateChange, handleReconnect, setError]);
         
         switch (message.type) {
           case 'connection_established':
