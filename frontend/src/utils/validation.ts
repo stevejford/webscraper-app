@@ -1,6 +1,6 @@
 // Validation utilities
 
-import { ScrapeRequest, ValidationResult, FormErrors } from '../types';
+import type { ScrapeRequest, ValidationResult, FormErrors } from '../types/api';
 import { LIMITS } from './constants';
 import { isValidUrl } from './helpers';
 

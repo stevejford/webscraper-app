@@ -1,12 +1,12 @@
 // Advanced WebSocket React hook with comprehensive state management
 
 import { useEffect, useCallback, useRef } from 'react';
-import { 
-  ConnectionState, 
-  WebSocketMessage, 
-  MessageHandlers,
-  ScrapeRequest 
-} from '../types';
+import type {
+  ConnectionState,
+  WebSocketMessage,
+  MessageHandlers
+} from '../types/websocket';
+import type { ScrapeRequest } from '../types/api';
 import { webSocketManager } from '../services';
 import { useScrapingStore } from '../store/scrapingStore';
 import { useNotificationStore } from '../store/notificationStore';
@@ -83,8 +83,10 @@ export const useWebSocket = () => {
     }, [addNotification]),
 
     onStatusUpdate: useCallback((message) => {
-      console.log('📊 Status update:', message.data);
+      console.log('📊 Status update received:', message.data);
+      console.log('📊 Pages scraped:', message.data.pages_scraped, 'URLs found:', message.data.urls_found, 'Progress:', message.data.progress);
       updateSessionStatus(message.data);
+      console.log('📊 Status update processed');
     }, [updateSessionStatus]),
 
     onContentDownloaded: useCallback((message) => {

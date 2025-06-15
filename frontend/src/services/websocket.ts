@@ -1,13 +1,13 @@
 // Advanced WebSocket service with reconnection, queuing, and error handling
 
-import { 
-  WebSocketMessage, 
-  ConnectionStatus, 
-  ConnectionState, 
-  WebSocketConfig, 
-  MessageHandlers, 
-  QueuedMessage 
-} from '../types';
+import type {
+  WebSocketMessage,
+  ConnectionStatus,
+  ConnectionState,
+  WebSocketConfig,
+  MessageHandlers,
+  QueuedMessage
+} from '../types/websocket';
 import { config, WS_CONSTANTS } from '../utils';
 
 export class WebSocketManager {
@@ -69,8 +69,11 @@ export class WebSocketManager {
         this.ws.onopen = () => {
           console.log('✅ WebSocket connected successfully');
           this.clearConnectionTimeout();
-          this.connectionState.reconnectAttempts = 0;
-          this.connectionState.lastConnected = new Date();
+          this.connectionState = {
+            ...this.connectionState,
+            reconnectAttempts: 0,
+            lastConnected: new Date(),
+          };
           this.updateConnectionState('connected');
           
           // Start heartbeat
@@ -149,7 +152,10 @@ export class WebSocketManager {
       return;
     }
 
-    this.connectionState.reconnectAttempts++;
+    this.connectionState = {
+      ...this.connectionState,
+      reconnectAttempts: this.connectionState.reconnectAttempts + 1,
+    };
     const delay = this.wsConfig.reconnectDelay * Math.pow(2, this.connectionState.reconnectAttempts - 1);
     
     console.log(`🔄 Reconnecting in ${delay}ms (attempt ${this.connectionState.reconnectAttempts}/${this.wsConfig.maxReconnectAttempts})`);

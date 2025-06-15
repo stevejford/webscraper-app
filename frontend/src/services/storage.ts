@@ -1,6 +1,7 @@
 // Storage service for data persistence
 
-import { ScrapeSession, ScrapeRequest, Theme } from '../types';
+import type { ScrapeSession, ScrapeRequest } from '../types/api';
+import type { Theme } from '../types/ui';
 import { STORAGE_KEYS, LIMITS } from '../utils';
 
 class StorageService {

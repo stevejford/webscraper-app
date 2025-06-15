@@ -1,7 +1,7 @@
 // Utility helper functions
 
 import { FILE_SIZES } from './constants';
-import { ScrapedContent } from '../types';
+import type { ScrapedContent } from '../types/api';
 
 // Format file size in human readable format
 export const formatFileSize = (bytes: number): string => {
@@ -71,6 +71,30 @@ export const debounce = <T extends (...args: any[]) => any>(
     timeoutId = setTimeout(() => func(...args), delay);
   };
 };
+
+// Format date in standard format
+export const formatDate = (date: string | Date): string => {
+  const d = new Date(date);
+  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+};
+
+// Format number with K/M suffixes
+export const formatNumber = (num: number): string => {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + 'M';
+  } else if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'K';
+  }
+  return num.toString();
+};
+
+// Class name utility
+export const classNames = (...classes: (string | undefined | null | false)[]): string => {
+  return classes.filter(Boolean).join(' ');
+};
+
+// Alias for classNames to match common naming convention
+export const cn = classNames;
 
 // Throttle function
 export const throttle = <T extends (...args: any[]) => any>(
@@ -174,10 +198,7 @@ export const estimateTimeRemaining = (
   return remaining / rate;
 };
 
-// Format number with commas
-export const formatNumber = (num: number): string => {
-  return num.toLocaleString();
-};
+
 
 // Convert bytes to appropriate unit
 export const bytesToUnit = (bytes: number, unit: 'KB' | 'MB' | 'GB'): number => {

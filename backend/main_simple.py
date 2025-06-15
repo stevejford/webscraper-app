@@ -109,77 +109,93 @@ class SimpleWebScraperManager:
             # Estimate total pages
             status.estimated_total_pages = min(max_pages, 50)
             
-            while (to_crawl and pages_scraped < max_pages and 
-                   self.active_crawlers.get(session_id, False)):
-                
-                current_url = to_crawl.popleft()
-                
-                if current_url in crawled_urls:
-                    continue
-                
-                # Update status
-                status.current_url = current_url
+            # Helper function to send status updates
+            async def send_status_update(additional_info: str = "", current_page_url: str = ""):
+                status.current_url = current_page_url or getattr(status, 'current_url', "")
                 status.pages_scraped = pages_scraped
+                status.urls_found = len(found_urls)
+                status.external_urls_found = len(external_urls)
                 status.progress = min((pages_scraped / max_pages) * 100, 99)
-                
-                # Send real-time update
+
                 if websocket:
                     try:
+                        update_data = status.dict(default=str)
+                        if additional_info:
+                            update_data['additional_info'] = additional_info
                         await websocket.send_text(json.dumps({
                             "type": "status_update",
-                            "data": status.dict(default=str)
+                            "data": update_data
                         }))
-                    except:
+                        logger.info(f"Sent status update: {additional_info or 'Progress update'}")
+                    except Exception as e:
+                        logger.error(f"Failed to send status update: {e}")
                         pass
-                
+
+            while (to_crawl and pages_scraped < max_pages and
+                   self.active_crawlers.get(session_id, False)):
+
+                current_url = to_crawl.popleft()
+
+                if current_url in crawled_urls:
+                    continue
+
+                # Send initial status for this page
+                await send_status_update(f"Starting page {pages_scraped + 1}: {current_url}", current_url)
+
                 # Scrape the page using requests
                 try:
                     logger.info(f"Scraping: {current_url}")
-                    
+                    await send_status_update(f"Fetching page {pages_scraped + 1}: {current_url}", current_url)
+
                     headers = {
                         'User-Agent': request.user_agent or 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                     }
-                    
+
                     response = requests.get(current_url, headers=headers, timeout=10)
                     response.raise_for_status()
-                    
+
+                    await send_status_update(f"Processing page {pages_scraped + 1}: Extracting URLs", current_url)
                     soup = BeautifulSoup(response.content, 'html.parser')
-                    
+
                     # Extract URLs
                     for link in soup.find_all('a', href=True):
                         href = link['href']
                         full_url = urljoin(current_url, href)
-                        
+
                         parsed = urlparse(full_url)
                         if parsed.scheme in ['http', 'https']:
                             clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-                            
+
                             if parsed.netloc == domain:
                                 found_urls.add(clean_url)
-                                if (clean_url not in crawled_urls and 
+                                if (clean_url not in crawled_urls and
                                     clean_url not in to_crawl and
                                     (request.scrape_whole_site or len(to_crawl) < 20)):
                                     to_crawl.append(clean_url)
                             elif request.include_external:
                                 external_urls.add(clean_url)
-                    
+
                     logger.info(f"Successfully scraped {current_url}, found {len(soup.find_all('a', href=True))} links")
-                    
+                    await send_status_update(f"Page {pages_scraped + 1}: Found {len(found_urls)} URLs total", current_url)
+
                 except Exception as e:
                     logger.error(f"Error scraping {current_url}: {e}")
-                
+
                 crawled_urls.add(current_url)
                 pages_scraped += 1
-                
-                # Update counts
+
+                # Update counts and send completion status
                 status.urls_found = len(found_urls)
                 status.external_urls_found = len(external_urls)
-                
+                await send_status_update(f"Completed page {pages_scraped}/{max_pages}: {current_url}", current_url)
+
                 # Rate limiting
                 if request.delay > 0:
+                    await send_status_update(f"Waiting {request.delay}s before next page...", current_url)
                     await asyncio.sleep(request.delay)
             
             # Complete the scraping
+            await send_status_update("Finalizing results...")
             status.status = "completed"
             status.ended_at = datetime.now()
             status.progress = 100
@@ -318,4 +334,4 @@ if __name__ == "__main__":
     print("🌐 API Documentation: http://localhost:8000/docs")
     print("🔌 WebSocket endpoint: ws://localhost:8000/ws/scrape/{session_id}")
     
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

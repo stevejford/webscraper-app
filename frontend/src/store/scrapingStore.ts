@@ -2,14 +2,14 @@
 
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { 
-  ScrapeSession, 
-  ScrapeRequest, 
-  ScrapeStatus, 
-  ScrapeResult, 
+import type {
+  ScrapeSession,
+  ScrapeRequest,
+  ScrapeStatus,
+  ScrapeResult,
   ScrapedContent,
   ConnectionState,
-  ContentType 
+  ContentType
 } from '../types';
 import { DEFAULT_CONTENT_TYPES } from '../utils';
 import { storageService } from '../services';
@@ -197,17 +197,50 @@ export const useScrapingStore = create<ScrapingState>()(
       if (state.currentSession) {
         state.currentSession.status = status;
         state.currentSession.updated_at = new Date().toISOString();
-        
+
+        // CRITICAL FIX: Also update the result.status if result exists
+        if (state.currentSession.result) {
+          state.currentSession.result.status = status;
+        } else {
+          // Create a minimal result object if it doesn't exist yet
+          state.currentSession.result = {
+            session_id: status.session_id,
+            domain: '',
+            urls: [],
+            external_urls: [],
+            scraped_content: [],
+            page_contents: [],
+            statistics: {
+              total_pages_scraped: status.pages_scraped,
+              total_urls_found: status.urls_found,
+              external_urls_found: status.external_urls_found,
+              content_downloaded: status.content_downloaded,
+              total_file_size: 0,
+              duration_seconds: 0,
+              content_by_type: {},
+              success_rate: 0,
+              average_page_size: 0,
+            },
+            status: status,
+            created_at: state.currentSession.created_at,
+            updated_at: new Date().toISOString(),
+          };
+        }
+
         // Update in sessions list
         const sessionIndex = state.sessions.findIndex(s => s.id === status.session_id);
         if (sessionIndex !== -1) {
           state.sessions[sessionIndex].status = status;
           state.sessions[sessionIndex].updated_at = new Date().toISOString();
+          if (state.sessions[sessionIndex].result) {
+            state.sessions[sessionIndex].result!.status = status;
+          }
         }
-        
+
         // Save to storage
         storageService.updateSession(status.session_id, {
           status,
+          result: state.currentSession.result,
           updated_at: new Date().toISOString(),
         });
       }

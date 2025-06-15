@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { Theme, ModalState, LoadingState, SidebarState } from '../types';
+import type { Theme, ModalState, LoadingState, SidebarState } from '../types/ui';
 import { storageService } from '../services';
 
 interface UIState {

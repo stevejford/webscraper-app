@@ -1,6 +1,16 @@
 // Application constants and configuration
 
-import { Config, ContentType } from '../types';
+import type { ContentType } from '../types/api';
+
+// Define Config interface locally to avoid circular dependency
+interface Config {
+  API_BASE_URL: string;
+  WS_BASE_URL: string;
+  MAX_FILE_SIZE: number;
+  RECONNECT_ATTEMPTS: number;
+  HEARTBEAT_INTERVAL: number;
+  DEVELOPMENT: boolean;
+}
 
 // Environment configuration
 export const config: Config = {

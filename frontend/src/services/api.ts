@@ -1,11 +1,12 @@
 // API service for HTTP requests to the backend
 
-import { 
-  ApiResponse, 
-  HealthCheckResponse, 
-  SessionsResponse, 
-  ScrapeStatus, 
-  ScrapeResult 
+import type {
+  ApiResponse,
+  HealthCheckResponse,
+  SessionsResponse,
+  ScrapeStatus,
+  ScrapeResult,
+  PageContent
 } from '../types';
 import { config, API_ENDPOINTS } from '../utils';
 
@@ -104,6 +105,16 @@ class ApiService {
   // Get file URL for direct access
   getFileUrl(filePath: string): string {
     return `${this.baseURL}/downloads/${filePath}`;
+  }
+
+  // Get content file URL with proper API endpoint
+  getContentFileUrl(sessionId: string, filename: string): string {
+    return `${this.baseURL}/api/content/${sessionId}/${filename}`;
+  }
+
+  // Get page contents for a session
+  async getPageContents(sessionId: string): Promise<ApiResponse<{ session_id: string; page_contents: PageContent[]; total_pages: number }>> {
+    return this.request(`/api/page-content/${sessionId}`);
   }
 
   // Check if backend is available

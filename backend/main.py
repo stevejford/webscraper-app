@@ -17,6 +17,7 @@ import aiofiles
 from pathlib import Path
 import mimetypes
 from urllib.parse import urljoin, urlparse
+import hashlib
 
 # Crawl4AI imports
 try:
@@ -69,6 +70,26 @@ class ScrapedContent(BaseModel):
     downloaded_at: datetime
     success: bool = True
     error: Optional[str] = None
+    # New fields for context linking
+    source_page_url: Optional[str] = None  # Which page this content was found on
+    alt_text: Optional[str] = None  # Alt text for images
+    link_text: Optional[str] = None  # Link text for downloadable files
+    context: Optional[str] = None  # Surrounding text context
+
+class PageContent(BaseModel):
+    """Represents the full content of a scraped page"""
+    url: str
+    title: Optional[str] = None
+    html_content: str
+    text_content: str
+    meta_description: Optional[str] = None
+    meta_keywords: Optional[str] = None
+    headings: List[str] = []
+    links: List[str] = []
+    images: List[str] = []
+    media_files: List[str] = []
+    scraped_at: datetime
+    file_path: Optional[str] = None  # Path to saved HTML file
 
 class ScrapeStatus(BaseModel):
     session_id: str
@@ -89,6 +110,7 @@ class ScrapeResult(BaseModel):
     urls: List[str]
     external_urls: List[str]
     scraped_content: List[ScrapedContent]
+    page_contents: List[PageContent] = []  # New: Full page content with HTML
     statistics: Dict[str, Any]
     status: ScrapeStatus
 
@@ -96,6 +118,10 @@ class ScrapeResult(BaseModel):
 active_sessions: Dict[str, Dict] = {}
 session_results: Dict[str, ScrapeResult] = {}
 websocket_connections: Dict[str, WebSocket] = {}
+
+# Content deduplication registry
+# Maps content hash -> (file_path, session_id, original_url, file_size)
+content_hash_registry: Dict[str, tuple] = {}
 
 # Session cleanup utility
 async def cleanup_old_sessions():
@@ -111,7 +137,17 @@ async def cleanup_old_sessions():
 
     for session_id in sessions_to_remove:
         session_results.pop(session_id, None)
-        logger.info(f"Cleaned up old session: {session_id}")
+
+        # Clean up content hash registry entries for this session
+        hashes_to_remove = []
+        for content_hash, (file_path, reg_session_id, url, file_size) in content_hash_registry.items():
+            if reg_session_id == session_id:
+                hashes_to_remove.append(content_hash)
+
+        for content_hash in hashes_to_remove:
+            content_hash_registry.pop(content_hash, None)
+
+        logger.info(f"Cleaned up old session: {session_id} (removed {len(hashes_to_remove)} content hashes)")
 
     # Clean up orphaned active sessions (older than 1 hour)
     active_cutoff = current_time - timedelta(hours=1)
@@ -175,6 +211,19 @@ class EnhancedWebScraperManager:
     def __init__(self):
         self.active_crawlers: Dict[str, bool] = {}
         self.session = None
+
+    def calculate_content_hash(self, content_data: bytes) -> str:
+        """Calculate SHA-256 hash of content for deduplication"""
+        return hashlib.sha256(content_data).hexdigest()
+
+    def check_duplicate_content(self, content_hash: str) -> Optional[tuple]:
+        """Check if content with this hash already exists
+        Returns (file_path, session_id, original_url, file_size) if found, None otherwise"""
+        return content_hash_registry.get(content_hash)
+
+    def register_content(self, content_hash: str, file_path: str, session_id: str, url: str, file_size: int):
+        """Register content in the deduplication registry"""
+        content_hash_registry[content_hash] = (file_path, session_id, url, file_size)
     
     async def __aenter__(self):
         if not CRAWL4AI_AVAILABLE:
@@ -237,8 +286,95 @@ class EnhancedWebScraperManager:
                 return True
         
         return False
-    
-    async def download_content(self, url: str, session_id: str) -> Optional[ScrapedContent]:
+
+    async def save_page_content(self, url: str, html: str, session_id: str) -> PageContent:
+        """Save full page content with HTML and extract metadata"""
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+
+            # Extract page metadata
+            title = soup.find('title')
+            title_text = title.get_text().strip() if title else None
+
+            meta_desc = soup.find('meta', attrs={'name': 'description'})
+            meta_description = meta_desc.get('content') if meta_desc else None
+
+            meta_keys = soup.find('meta', attrs={'name': 'keywords'})
+            meta_keywords = meta_keys.get('content') if meta_keys else None
+
+            # Extract headings
+            headings = []
+            for h in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+                heading_text = h.get_text().strip()
+                if heading_text:
+                    headings.append(heading_text)
+
+            # Extract all links
+            links = []
+            for link in soup.find_all('a', href=True):
+                full_url = urljoin(url, link['href'])
+                links.append(full_url)
+
+            # Extract all images
+            images = []
+            for img in soup.find_all('img', src=True):
+                img_url = urljoin(url, img['src'])
+                images.append(img_url)
+
+            # Extract media files
+            media_files = []
+            for media in soup.find_all(['video', 'audio', 'source'], src=True):
+                media_url = urljoin(url, media['src'])
+                media_files.append(media_url)
+
+            # Extract clean text content
+            for script in soup(["script", "style"]):
+                script.decompose()
+            text_content = soup.get_text()
+            text_content = ' '.join(text_content.split())  # Clean whitespace
+
+            # Save HTML file
+            session_dir = DOWNLOADS_DIR / session_id
+            session_dir.mkdir(exist_ok=True)
+
+            # Create safe filename from URL
+            parsed_url = urlparse(url)
+            safe_filename = f"{parsed_url.netloc}_{parsed_url.path.replace('/', '_')}.html"
+            safe_filename = safe_filename.replace('..', '').replace(':', '_')
+            if not safe_filename.endswith('.html'):
+                safe_filename += '.html'
+
+            html_file_path = session_dir / safe_filename
+
+            async with aiofiles.open(html_file_path, 'w', encoding='utf-8') as f:
+                await f.write(html)
+
+            return PageContent(
+                url=url,
+                title=title_text,
+                html_content=html,
+                text_content=text_content[:10000],  # Limit text content
+                meta_description=meta_description,
+                meta_keywords=meta_keywords,
+                headings=headings,
+                links=links,
+                images=images,
+                media_files=media_files,
+                scraped_at=datetime.now(),
+                file_path=str(html_file_path.relative_to(DOWNLOADS_DIR))
+            )
+
+        except Exception as e:
+            logger.error(f"Error saving page content for {url}: {e}")
+            return PageContent(
+                url=url,
+                title=None,
+                html_content=html,
+                text_content="",
+                scraped_at=datetime.now()
+            )
+
+    async def download_content(self, url: str, session_id: str, source_page_url: str = None, context: str = None) -> Optional[ScrapedContent]:
         """Download content from URL and save locally with security checks"""
         try:
             # Security: Validate URL scheme
@@ -301,6 +437,29 @@ class EnhancedWebScraperManager:
                         error=f"File too large: {len(content_data)} bytes (max: {MAX_FILE_SIZE})"
                     )
 
+                # Check for duplicate content
+                content_hash = self.calculate_content_hash(content_data)
+                duplicate_info = self.check_duplicate_content(content_hash)
+
+                if duplicate_info:
+                    existing_file_path, existing_session_id, original_url, file_size = duplicate_info
+                    logger.info(f"Duplicate content found for {url}, referencing existing file from {original_url}")
+
+                    # Return reference to existing file instead of downloading again
+                    return ScrapedContent(
+                        url=url,
+                        content_type=content_type,
+                        file_path=existing_file_path,  # Reference to existing file
+                        file_size=file_size,
+                        mime_type=mime_type,
+                        downloaded_at=datetime.now(),
+                        success=True,
+                        source_page_url=source_page_url,
+                        context=context[:500] if context else None,
+                        # Add a note that this is a duplicate
+                        description=f"Duplicate of content from {original_url}"
+                    )
+
                 # Security: Validate filename to prevent path traversal
                 safe_filename = os.path.basename(filename).replace('..', '')
                 if not safe_filename:
@@ -308,28 +467,56 @@ class EnhancedWebScraperManager:
 
                 file_path = session_dir / safe_filename
 
+                # Save the new file
                 async with aiofiles.open(file_path, 'wb') as f:
                     await f.write(content_data)
+
+                # Register the content in deduplication registry
+                self.register_content(content_hash, safe_filename, session_id, url, len(content_data))
+                logger.info(f"Registered new content: {url} -> {safe_filename} (hash: {content_hash[:8]}...)")
                 
                 # Extract additional metadata
                 title = None
                 description = None
                 text_content = None
-                
+                alt_text = None
+                link_text = None
+
                 if content_type == 'text' or (mime_type and mime_type.startswith('text/')):
                     text_content = content_data.decode('utf-8', errors='ignore')[:5000]  # First 5000 chars
-                
+
+                # Extract context information if source page is provided
+                if source_page_url and context:
+                    # Try to extract alt text or link text from context
+                    try:
+                        soup = BeautifulSoup(context, 'html.parser')
+                        # Look for img with this src
+                        img = soup.find('img', src=lambda x: x and url in x)
+                        if img:
+                            alt_text = img.get('alt', '')
+
+                        # Look for link with this href
+                        link = soup.find('a', href=lambda x: x and url in x)
+                        if link:
+                            link_text = link.get_text().strip()
+                    except:
+                        pass
+
                 return ScrapedContent(
                     url=url,
                     content_type=content_type,
-                    file_path=f"/downloads/{session_id}/{filename}",
+                    file_path=safe_filename,  # Store just filename, session_id is handled by API endpoint
                     file_size=len(content_data),
                     mime_type=mime_type,
                     title=title,
                     description=description,
                     text_content=text_content,
                     downloaded_at=datetime.now(),
-                    success=True
+                    success=True,
+                    source_page_url=source_page_url,
+                    alt_text=alt_text,
+                    link_text=link_text,
+                    context=context[:500] if context else None  # Limit context size
                 )
                 
         except aiohttp.ClientError as e:
@@ -353,41 +540,72 @@ class EnhancedWebScraperManager:
                 error=f"Unexpected error: {str(e)}"
             )
     
-    async def extract_content_urls(self, html: str, base_url: str, content_types: List[ContentType]) -> List[str]:
-        """Extract downloadable content URLs from HTML"""
-        content_urls = []
-        
+    async def extract_content_urls_with_context(self, html: str, base_url: str, content_types: List[ContentType]) -> List[tuple]:
+        """Extract downloadable content URLs from HTML with context information"""
+        content_items = []
+
         try:
             soup = BeautifulSoup(html, 'html.parser')
-            
-            # Find images
+
+            # Find images with context
             for img in soup.find_all('img', src=True):
                 img_url = urljoin(base_url, img['src'])
                 if self.should_download_content(img_url, content_types):
-                    content_urls.append(img_url)
-            
-            # Find links to downloadable content
+                    # Get surrounding context
+                    parent = img.parent
+                    context_html = str(parent) if parent else str(img)
+                    content_items.append((img_url, context_html))
+
+            # Find links to downloadable content with context
             for link in soup.find_all('a', href=True):
                 link_url = urljoin(base_url, link['href'])
                 if self.should_download_content(link_url, content_types):
-                    content_urls.append(link_url)
-            
-            # Find video sources
+                    # Get the link and its surrounding context
+                    parent = link.parent
+                    context_html = str(parent) if parent else str(link)
+                    content_items.append((link_url, context_html))
+
+            # Find video sources with context
             for video in soup.find_all(['video', 'source'], src=True):
                 video_url = urljoin(base_url, video['src'])
                 if self.should_download_content(video_url, content_types):
-                    content_urls.append(video_url)
-            
-            # Find audio sources
+                    # Get video element and its context
+                    if video.name == 'source':
+                        parent = video.parent  # Get the video element
+                        context_html = str(parent) if parent else str(video)
+                    else:
+                        context_html = str(video)
+                    content_items.append((video_url, context_html))
+
+            # Find audio sources with context
             for audio in soup.find_all(['audio', 'source'], src=True):
                 audio_url = urljoin(base_url, audio['src'])
                 if self.should_download_content(audio_url, content_types):
-                    content_urls.append(audio_url)
-            
+                    # Get audio element and its context
+                    if audio.name == 'source':
+                        parent = audio.parent  # Get the audio element
+                        context_html = str(parent) if parent else str(audio)
+                    else:
+                        context_html = str(audio)
+                    content_items.append((audio_url, context_html))
+
         except Exception as e:
             logger.error(f"Error extracting content URLs: {e}")
-        
-        return list(set(content_urls))  # Remove duplicates
+
+        # Remove duplicates while preserving context
+        seen_urls = set()
+        unique_items = []
+        for url, context in content_items:
+            if url not in seen_urls:
+                seen_urls.add(url)
+                unique_items.append((url, context))
+
+        return unique_items
+
+    async def extract_content_urls(self, html: str, base_url: str, content_types: List[ContentType]) -> List[str]:
+        """Extract downloadable content URLs from HTML (backward compatibility)"""
+        items = await self.extract_content_urls_with_context(html, base_url, content_types)
+        return [url for url, context in items]
     
     async def scrape_website(self, session_id: str, request: ScrapeRequest, websocket: Optional[WebSocket] = None):
         """Enhanced scraping with content downloading"""
@@ -399,6 +617,7 @@ class EnhancedWebScraperManager:
         external_urls = set()
         crawled_urls = set()
         scraped_content = []
+        page_contents = []  # New: Store full page content
         to_crawl = [str(request.url)]
         
         status = ScrapeStatus(
@@ -451,6 +670,35 @@ class EnhancedWebScraperManager:
                     pages_scraped = 0
                     max_pages = request.max_pages if request.max_pages > 0 else 1000
 
+                    # Helper function to send status updates
+                    async def send_status_update(additional_info: str = "", current_page_url: str = ""):
+                        status.current_url = current_page_url or getattr(status, 'current_url', "")
+                        status.pages_scraped = pages_scraped
+                        status.urls_found = len(found_urls)
+                        status.external_urls_found = len(external_urls)
+                        status.content_downloaded = len(scraped_content)
+
+                        if status.estimated_total_pages:
+                            base_progress = (pages_scraped / status.estimated_total_pages) * 100
+                            status.progress = min(base_progress, 99)
+                        else:
+                            status.progress = min(50 + (pages_scraped / 100) * 50, 99)
+
+                        if websocket:
+                            try:
+                                update_data = status.model_dump(mode='json')
+                                if additional_info:
+                                    update_data['additional_info'] = additional_info
+                                await websocket.send_text(json.dumps({
+                                    "type": "status_update",
+                                    "data": update_data,
+                                    "timestamp": datetime.now().isoformat()
+                                }))
+                                logger.info(f"✅ Sent status update: {additional_info or 'Progress update'} | Pages: {status.pages_scraped} | URLs: {status.urls_found} | Progress: {status.progress}%")
+                            except Exception as e:
+                                logger.error(f"❌ Failed to send status update: {e}")
+                                pass
+
                     while (to_crawl and pages_scraped < max_pages and
                            self.active_crawlers.get(session_id, False)):
 
@@ -459,27 +707,14 @@ class EnhancedWebScraperManager:
                         if current_url in crawled_urls:
                             continue
 
-                        # Update status
-                        status.current_url = current_url
-                        status.pages_scraped = pages_scraped
-                        if status.estimated_total_pages:
-                            status.progress = min((pages_scraped / status.estimated_total_pages) * 100, 99)
-                        else:
-                            status.progress = min(50 + (pages_scraped / 100) * 50, 99)
-
-                        # Send real-time update
-                        if websocket:
-                            try:
-                                await websocket.send_text(json.dumps({
-                                    "type": "status_update",
-                                    "data": status.model_dump(mode='json')
-                                }))
-                            except:
-                                pass
+                        # Send initial status for this page
+                        await send_status_update(f"Starting page {pages_scraped + 1}: {current_url}", current_url)
 
                         # Crawl the page
                         try:
                             logger.info(f"Starting crawl for: {current_url}")
+                            await send_status_update(f"Fetching page {pages_scraped + 1}: {current_url}", current_url)
+
                             result = await crawler.arun(url=current_url, config=crawler_config)
 
                             logger.info(f"Crawl result - Success: {result.success if result else 'No result'}, HTML present: {result.html is not None if result else 'No result'}")
@@ -489,9 +724,22 @@ class EnhancedWebScraperManager:
                                 logger.info(f"Result attributes: success={result.success}, html_type={type(result.html)}, html_length={len(result.html) if result.html else 0}")
 
                             if result and result.success and result.html:
+                                await send_status_update(f"Processing page {pages_scraped + 1}: Extracting content", current_url)
+                                # Save full page content
+                                logger.info(f"Saving page content for {current_url}")
+                                try:
+                                    page_content = await self.save_page_content(current_url, result.html, session_id)
+                                    page_contents.append(page_content)
+                                    logger.info(f"Successfully saved page content for {current_url}")
+                                except Exception as e:
+                                    logger.error(f"Error saving page content for {current_url}: {e}")
+                                    import traceback
+                                    logger.error(f"Traceback: {traceback.format_exc()}")
+
                                 soup = BeautifulSoup(result.html, 'html.parser')
 
                                 # Extract URLs
+                                await send_status_update(f"Processing page {pages_scraped + 1}: Extracting URLs", current_url)
                                 for link in soup.find_all('a', href=True):
                                     href = link['href']
                                     full_url = urljoin(current_url, href)
@@ -509,28 +757,55 @@ class EnhancedWebScraperManager:
                                         elif request.include_external:
                                             external_urls.add(clean_url)
 
+                                # Send update after URL extraction
+                                await send_status_update(f"Page {pages_scraped + 1}: Found {len(found_urls)} URLs total", current_url)
+
                                 # Download content if enabled
+                                logger.info(f"Checking content download: download_content={request.download_content}, content_types_count={len(request.content_types) if request.content_types else 0}")
                                 if request.download_content and request.content_types:
-                                    content_urls = await self.extract_content_urls(
-                                        result.html, current_url, request.content_types
-                                    )
+                                    logger.info(f"Starting content extraction for {current_url}")
+                                    await send_status_update(f"Page {pages_scraped + 1}: Searching for downloadable content", current_url)
+                                    try:
+                                        content_items = await self.extract_content_urls_with_context(
+                                            result.html, current_url, request.content_types
+                                        )
+                                        logger.info(f"Found {len(content_items)} content items for {current_url}")
 
-                                    for content_url in content_urls[:10]:  # Limit per page
-                                        if self.active_crawlers.get(session_id, False):
-                                            content = await self.download_content(content_url, session_id)
-                                            if content and content.success:
-                                                scraped_content.append(content)
-                                                status.content_downloaded = len(scraped_content)
+                                        if content_items:
+                                            await send_status_update(f"Page {pages_scraped + 1}: Found {len(content_items)} items to download", current_url)
 
-                                                # Send content update
-                                                if websocket:
-                                                    try:
-                                                        await websocket.send_text(json.dumps({
-                                                            "type": "content_downloaded",
-                                                            "data": content.dict(default=str)
-                                                        }))
-                                                    except:
-                                                        pass
+                                        for i, (content_url, context_html) in enumerate(content_items[:10]):  # Limit per page
+                                            if self.active_crawlers.get(session_id, False):
+                                                logger.info(f"Downloading content: {content_url}")
+                                                await send_status_update(f"Page {pages_scraped + 1}: Downloading item {i + 1}/{min(len(content_items), 10)}", current_url)
+
+                                                content = await self.download_content(
+                                                    content_url, session_id, current_url, context_html
+                                                )
+                                                if content and content.success:
+                                                    scraped_content.append(content)
+                                                    status.content_downloaded = len(scraped_content)
+                                                    logger.info(f"Successfully downloaded: {content_url}")
+
+                                                    # Send content update with real-time status
+                                                    if websocket:
+                                                        try:
+                                                            await websocket.send_text(json.dumps({
+                                                                "type": "content_downloaded",
+                                                                "data": content.dict(default=str)
+                                                            }))
+                                                            # Also send status update
+                                                            await send_status_update(f"Downloaded: {content.title or content_url}", current_url)
+                                                        except:
+                                                            pass
+                                                else:
+                                                    logger.warning(f"Failed to download content: {content_url}")
+                                    except Exception as e:
+                                        logger.error(f"Error in content extraction for {current_url}: {e}")
+                                        import traceback
+                                        logger.error(f"Traceback: {traceback.format_exc()}")
+                                else:
+                                    logger.info(f"Content download disabled or no content types specified")
                             else:
                                 error_msg = f"Failed to crawl {current_url}"
                                 if result:
@@ -549,12 +824,14 @@ class EnhancedWebScraperManager:
                             crawled_urls.add(current_url)
                             pages_scraped += 1
 
-                            # Update counts
+                            # Update counts and send completion status for this page
                             status.urls_found = len(found_urls)
                             status.external_urls_found = len(external_urls)
+                            await send_status_update(f"Completed page {pages_scraped}/{max_pages}: {current_url}", current_url)
 
                             # Rate limiting
                             if request.delay > 0:
+                                await send_status_update(f"Waiting {request.delay}s before next page...", current_url)
                                 await asyncio.sleep(request.delay)
 
                         except Exception as e:
@@ -562,19 +839,29 @@ class EnhancedWebScraperManager:
                             continue
                 
                 # Complete the scraping
+                await send_status_update("Finalizing results...")
                 status.status = "completed"
                 status.ended_at = datetime.now()
                 status.progress = 100
                 
                 # Calculate statistics
+                # Count duplicates vs unique content
+                unique_content = [c for c in scraped_content if not c.description or not c.description.startswith("Duplicate of")]
+                duplicate_content = [c for c in scraped_content if c.description and c.description.startswith("Duplicate of")]
+
                 statistics = {
                     "total_pages_scraped": pages_scraped,
                     "total_urls_found": len(found_urls),
                     "external_urls_found": len(external_urls),
                     "content_downloaded": len(scraped_content),
+                    "unique_content_downloaded": len(unique_content),
+                    "duplicate_content_skipped": len(duplicate_content),
                     "total_file_size": sum(c.file_size or 0 for c in scraped_content),
+                    "unique_file_size": sum(c.file_size or 0 for c in unique_content),
+                    "space_saved_by_deduplication": sum(c.file_size or 0 for c in duplicate_content),
                     "duration_seconds": (status.ended_at - status.started_at).total_seconds(),
-                    "content_by_type": {}
+                    "content_by_type": {},
+                    "deduplication_enabled": True
                 }
                 
                 # Count content by type
@@ -589,6 +876,7 @@ class EnhancedWebScraperManager:
                     urls=list(found_urls),
                     external_urls=list(external_urls),
                     scraped_content=scraped_content,
+                    page_contents=page_contents,  # Include full page content
                     statistics=statistics,
                     status=status
                 )
@@ -769,6 +1057,89 @@ async def get_session_result(session_id: str):
         return session_results[session_id]
     else:
         raise HTTPException(status_code=404, detail="Session not found")
+
+@app.get("/api/content/{session_id}/{filename:path}")
+async def get_content_file(session_id: str, filename: str):
+    """Serve downloaded content files with proper headers"""
+    try:
+        file_path = DOWNLOADS_DIR / session_id / filename
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Security check: ensure file is within session directory
+        if not str(file_path.resolve()).startswith(str((DOWNLOADS_DIR / session_id).resolve())):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Get mime type
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+        if not mime_type:
+            mime_type = 'application/octet-stream'
+
+        # Read file
+        async with aiofiles.open(file_path, 'rb') as f:
+            content = await f.read()
+
+        from fastapi.responses import Response
+        return Response(
+            content=content,
+            media_type=mime_type,
+            headers={
+                "Content-Disposition": f"inline; filename={filename}",
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error serving file {session_id}/{filename}: {e}")
+        raise HTTPException(status_code=500, detail="Error serving file")
+
+@app.get("/api/page-content/{session_id}")
+async def get_page_contents(session_id: str):
+    """Get all page contents for a session"""
+    if session_id in session_results:
+        result = session_results[session_id]
+        return {
+            "session_id": session_id,
+            "page_contents": result.page_contents,
+            "total_pages": len(result.page_contents)
+        }
+    else:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+@app.get("/api/deduplication/stats")
+async def get_deduplication_stats():
+    """Get global deduplication statistics"""
+    total_unique_files = len(content_hash_registry)
+    total_file_size = sum(info[3] for info in content_hash_registry.values())  # info[3] is file_size
+
+    # Count content by type from registry
+    content_types = {}
+    for file_path, session_id, url, file_size in content_hash_registry.values():
+        # Try to determine content type from file extension
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp']:
+            content_type = 'image'
+        elif ext == '.pdf':
+            content_type = 'pdf'
+        elif ext in ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm']:
+            content_type = 'video'
+        elif ext in ['.mp3', '.wav', '.m4a', '.flac', '.ogg']:
+            content_type = 'audio'
+        elif ext in ['.doc', '.docx', '.txt', '.rtf', '.odt']:
+            content_type = 'document'
+        else:
+            content_type = 'other'
+
+        content_types[content_type] = content_types.get(content_type, 0) + 1
+
+    return {
+        "total_unique_files": total_unique_files,
+        "total_file_size_bytes": total_file_size,
+        "total_file_size_mb": round(total_file_size / (1024 * 1024), 2),
+        "content_by_type": content_types,
+        "registry_size": len(content_hash_registry)
+    }
 
 if __name__ == "__main__":
     import uvicorn

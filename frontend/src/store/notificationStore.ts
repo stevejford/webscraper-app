@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { Notification, NotificationType } from '../types';
+import type { Notification, NotificationType } from '../types/ui';
 import { generateId } from '../utils';
 
 interface NotificationState {

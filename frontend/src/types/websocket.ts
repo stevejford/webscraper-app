@@ -1,6 +1,6 @@
 // WebSocket types and interfaces
 
-import { ScrapeStatus, ScrapeResult, ScrapedContent } from './api';
+import type { ScrapeStatus, ScrapeResult, ScrapedContent } from './api';
 
 export type WebSocketMessage = 
   | ConnectionEstablishedMessage

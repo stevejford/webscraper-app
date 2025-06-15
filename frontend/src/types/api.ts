@@ -34,6 +34,26 @@ export interface ScrapedContent {
   downloaded_at: string;
   success: boolean;
   error?: string;
+  // New context fields
+  source_page_url?: string;
+  alt_text?: string;
+  link_text?: string;
+  context?: string;
+}
+
+export interface PageContent {
+  url: string;
+  title?: string;
+  html_content: string;
+  text_content: string;
+  meta_description?: string;
+  meta_keywords?: string;
+  headings: string[];
+  links: string[];
+  images: string[];
+  media_files: string[];
+  scraped_at: string;
+  file_path?: string;
 }
 
 export interface ScrapeStatus {
@@ -49,6 +69,7 @@ export interface ScrapeStatus {
   ended_at?: string;
   estimated_total_pages?: number;
   estimated_completion_time?: string;
+  additional_info?: string; // Real-time activity information
 }
 
 export interface ScrapeResult {
@@ -57,6 +78,7 @@ export interface ScrapeResult {
   urls: string[];
   external_urls: string[];
   scraped_content: ScrapedContent[];
+  page_contents: PageContent[];  // New: Full page content with HTML
   statistics: {
     total_pages_scraped: number;
     total_urls_found: number;

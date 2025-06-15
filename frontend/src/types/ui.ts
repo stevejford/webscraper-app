@@ -1,6 +1,6 @@
 // UI-specific types and interfaces
 
-import { ScrapedContent } from './api';
+import type { ScrapedContent } from './api';
 
 // Theme types
 export type Theme = 'light' | 'dark' | 'system';
