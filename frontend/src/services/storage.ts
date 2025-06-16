@@ -56,9 +56,8 @@ class StorageService {
 
   // Session persistence
   saveSessions(sessions: ScrapeSession[]): void {
-    // Limit the number of stored sessions
-    const limitedSessions = sessions.slice(0, LIMITS.MAX_SESSIONS);
-    this.setItem(STORAGE_KEYS.SESSIONS, limitedSessions);
+    // Store all sessions - remove artificial limit for better history
+    this.setItem(STORAGE_KEYS.SESSIONS, sessions);
   }
 
   getSessions(): ScrapeSession[] {
@@ -67,8 +66,14 @@ class StorageService {
 
   addSession(session: ScrapeSession): void {
     const sessions = this.getSessions();
-    const updatedSessions = [session, ...sessions.slice(0, LIMITS.MAX_SESSIONS - 1)];
-    this.saveSessions(updatedSessions);
+    // Check if session already exists and update it, otherwise add to beginning
+    const existingIndex = sessions.findIndex(s => s.id === session.id);
+    if (existingIndex !== -1) {
+      sessions[existingIndex] = session;
+    } else {
+      sessions.unshift(session);
+    }
+    this.saveSessions(sessions);
   }
 
   updateSession(sessionId: string, updates: Partial<ScrapeSession>): void {

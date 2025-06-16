@@ -7,7 +7,7 @@ interface EnhancedPDFViewerProps {
   onClose: () => void;
 }
 
-type ViewMode = 'embed' | 'object' | 'iframe';
+type ViewMode = 'iframe' | 'embed' | 'object' | 'google' | 'mozilla';
 
 export const EnhancedPDFViewer: React.FC<EnhancedPDFViewerProps> = ({ content, onClose }) => {
   const { currentSession } = useScrapingStore();
@@ -71,6 +71,30 @@ export const EnhancedPDFViewer: React.FC<EnhancedPDFViewerProps> = ({ content, o
     };
 
     switch (viewMode) {
+      case 'google':
+        // Use Google Docs viewer as a reliable fallback
+        const googleViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true`;
+        return (
+          <iframe
+            src={googleViewerUrl}
+            {...commonProps}
+            onError={() => setError('Failed to load PDF with Google Docs viewer')}
+            onLoad={() => setError('')}
+          />
+        );
+
+      case 'mozilla':
+        // Use Mozilla's PDF.js viewer
+        const mozillaViewerUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfUrl)}`;
+        return (
+          <iframe
+            src={mozillaViewerUrl}
+            {...commonProps}
+            onError={() => setError('Failed to load PDF with Mozilla PDF.js viewer')}
+            onLoad={() => setError('')}
+          />
+        );
+
       case 'embed':
         return (
           <embed
@@ -160,9 +184,11 @@ export const EnhancedPDFViewer: React.FC<EnhancedPDFViewerProps> = ({ content, o
                 onChange={(e) => setViewMode(e.target.value as ViewMode)}
                 className="border rounded px-2 py-1 text-sm"
               >
-                <option value="iframe">IFrame (Recommended)</option>
-                <option value="embed">Embed</option>
-                <option value="object">Object</option>
+                <option value="iframe">IFrame (Browser Native)</option>
+                <option value="google">Google Docs Viewer</option>
+                <option value="mozilla">Mozilla PDF.js</option>
+                <option value="embed">Embed Tag</option>
+                <option value="object">Object Tag</option>
               </select>
             </div>
 

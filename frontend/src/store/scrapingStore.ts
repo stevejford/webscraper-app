@@ -169,7 +169,13 @@ export const useScrapingStore = create<ScrapingState>()(
     
     // Session history management
     addSession: (session) => set((state) => {
-      state.sessions = [session, ...state.sessions.slice(0, 9)]; // Keep last 10
+      // Remove artificial limit - keep all sessions for better history
+      const existingIndex = state.sessions.findIndex(s => s.id === session.id);
+      if (existingIndex !== -1) {
+        state.sessions[existingIndex] = session;
+      } else {
+        state.sessions.unshift(session);
+      }
       storageService.addSession(session);
     }),
     

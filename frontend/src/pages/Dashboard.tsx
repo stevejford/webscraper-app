@@ -5,6 +5,7 @@ import { ProgressDashboard } from '../components/display/ProgressDashboard';
 import { ResultsPanel } from '../components/display/ResultsPanel';
 import { ContentGallery } from '../components/media/ContentGallery';
 import { SessionHistory } from '../components/display/SessionHistory';
+import { SessionBrowser } from '../components/session/SessionBrowser';
 import { StatisticsPanel } from '../components/display/StatisticsPanel';
 import { PageContentViewer } from '../components/display/PageContentViewer';
 import { APIKeyStatus } from '../components/common/APIKeyStatus';
@@ -135,7 +136,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateToSettings }) =>
         return <ContentGallery contentType="all" showOnlySuccessful />;
       
       case 'history':
-        return <SessionHistory />;
+        return <SessionBrowser showHeader={true} compact={false} />;
       
       case 'settings':
         return (

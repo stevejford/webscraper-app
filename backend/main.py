@@ -472,11 +472,8 @@ class EnhancedWebScraperManager:
                     existing_file_path, existing_session_id, original_url, file_size = duplicate_info
                     logger.info(f"Duplicate content found for {url}, referencing existing file from {original_url}")
 
-                    # Ensure the existing file path includes session folder for consistency
-                    if not existing_file_path.startswith(existing_session_id + "/"):
-                        corrected_existing_path = f"{existing_session_id}/{existing_file_path}"
-                    else:
-                        corrected_existing_path = existing_file_path
+                    # Construct the correct existing file path (session_id/filename)
+                    corrected_existing_path = f"{existing_session_id}/{existing_file_path}"
 
                     # Save a deduplicated record to the database for this session
                     await self.save_deduplicated_file_to_supabase(
@@ -513,9 +510,8 @@ class EnhancedWebScraperManager:
                 # Save to Supabase Storage and Database
                 await self.save_file_to_supabase(session_id, url, str(file_path), safe_filename, len(content_data), mime_type, content_hash)
 
-                # Register the content in deduplication registry with session-based path
-                session_based_path = f"{session_id}/{safe_filename}"
-                self.register_content(content_hash, session_based_path, session_id, url, len(content_data))
+                # Register the content in deduplication registry (just filename, session handled separately)
+                self.register_content(content_hash, safe_filename, session_id, url, len(content_data))
                 logger.info(f"Registered new content: {url} -> {safe_filename} (hash: {content_hash[:8]}...)")
                 
                 # Extract additional metadata
@@ -759,8 +755,12 @@ class EnhancedWebScraperManager:
             with open(file_path, 'rb') as f:
                 file_data = f.read()
 
-            # Upload to storage bucket
-            storage_result = supabase.storage.from_("scraped-content").upload(storage_path, file_data)
+            # Upload to storage bucket with correct content type
+            storage_result = supabase.storage.from_("scraped-content").upload(
+                storage_path,
+                file_data,
+                file_options={"content-type": mime_type}
+            )
 
             # Get public URL
             public_url = supabase.storage.from_("scraped-content").get_public_url(storage_path)

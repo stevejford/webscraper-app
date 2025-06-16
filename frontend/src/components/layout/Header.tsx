@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useScrapingStore } from '../../store/scrapingStore';
 import { Button } from '../common/Button';
 import { Input } from '../common/Input';
+import { SessionSwitcher } from '../session/SessionSwitcher';
 
 interface HeaderProps {
   onNavigateToSettings?: () => void;
@@ -66,48 +67,54 @@ export const Header: React.FC<HeaderProps> = ({ onNavigateToSettings, onNavigate
           </div>
         </div>
 
-        {/* Center - Global Search */}
-        <div className="hidden md:flex flex-1 max-w-md mx-8">
-          {showGlobalSearch ? (
-            <div className="flex w-full space-x-2">
-              <Input
-                type="text"
-                placeholder="Search all content..."
-                value={globalSearchQuery}
-                onChange={(e) => setGlobalSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleGlobalSearch(globalSearchQuery)}
-                className="flex-1"
-                autoFocus
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleGlobalSearch(globalSearchQuery)}
-                disabled={!globalSearchQuery.trim()}
-              >
-                <Search size={16} />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setShowGlobalSearch(false);
-                  setGlobalSearchQuery('');
-                }}
-              >
-                <X size={16} />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center">
-              {currentSession && (
-                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span>Session: Active</span>
-                </div>
-              )}
-            </div>
-          )}
+        {/* Center - Session Switcher and Global Search */}
+        <div className="hidden md:flex flex-1 max-w-2xl mx-8 items-center space-x-4">
+          {/* Session Switcher */}
+          <SessionSwitcher maxRecentSessions={5} />
+
+          {/* Global Search */}
+          <div className="flex-1 max-w-md">
+            {showGlobalSearch ? (
+              <div className="flex w-full space-x-2">
+                <Input
+                  type="text"
+                  placeholder="Search all content..."
+                  value={globalSearchQuery}
+                  onChange={(e) => setGlobalSearchQuery(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleGlobalSearch(globalSearchQuery)}
+                  className="flex-1"
+                  autoFocus
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleGlobalSearch(globalSearchQuery)}
+                  disabled={!globalSearchQuery.trim()}
+                >
+                  <Search size={16} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowGlobalSearch(false);
+                    setGlobalSearchQuery('');
+                  }}
+                >
+                  <X size={16} />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center">
+                {currentSession && (
+                  <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    <span>Session: Active</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right side - Actions */}
