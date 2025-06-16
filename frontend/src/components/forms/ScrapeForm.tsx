@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Square, Settings, Globe, Download, FileText } from 'lucide-react';
+import { Play, Square, Settings, Globe, Download, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { useScrapingStore } from '../../store/scrapingStore';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { Button } from '../common/Button';
@@ -64,65 +64,156 @@ export const ScrapeForm: React.FC = () => {
   const canStop = isRunning;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <div className="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg border border-blue-200 dark:border-gray-700 p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-          Web Scraper Configuration
-        </h2>
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${
-            isConnected() ? 'bg-green-500' : 'bg-red-500'
-          }`} />
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            {isConnected() ? 'Connected' : 'Disconnected'}
-          </span>
+        <div className="flex items-center space-x-3">
+          <div className="p-3 bg-blue-600 rounded-lg">
+            <Globe className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Start Web Scraping
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Configure and launch your web scraping session
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-3">
+          <div className={`flex items-center space-x-2 px-3 py-1 rounded-full ${
+            isConnected() ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+          }`}>
+            <div className={`w-2 h-2 rounded-full ${
+              isConnected() ? 'bg-green-500' : 'bg-red-500'
+            }`} />
+            <span className="text-xs font-medium">
+              {isConnected() ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* URL Input */}
-        <div>
-          <Input
-            label="Target URL"
-            type="url"
-            value={formData.url}
-            onChange={(e) => updateFormData({ url: e.target.value })}
-            error={formErrors.url}
-            placeholder="https://example.com"
-            icon={<Globe size={16} />}
-            disabled={isRunning}
-          />
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Welcome Message for New Users */}
+        {!formData.url && (
+          <div className="text-center py-8">
+            <div className="max-w-2xl mx-auto">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                Welcome to Web Scraper! 🚀
+              </h2>
+              <p className="text-lg text-gray-600 dark:text-gray-400 mb-6">
+                Extract content, images, PDFs, and files from any website with our intelligent scraping engine.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <Globe className="w-6 h-6 text-blue-600 mx-auto mb-2" />
+                  <h4 className="font-medium text-gray-900 dark:text-white">Smart Crawling</h4>
+                  <p className="text-gray-600 dark:text-gray-400">Intelligently discovers and extracts content</p>
+                </div>
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                  <Download className="w-6 h-6 text-green-600 mx-auto mb-2" />
+                  <h4 className="font-medium text-gray-900 dark:text-white">Media Download</h4>
+                  <p className="text-gray-600 dark:text-gray-400">Downloads images, PDFs, videos, and documents</p>
+                </div>
+                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                  <FileText className="w-6 h-6 text-purple-600 mx-auto mb-2" />
+                  <h4 className="font-medium text-gray-900 dark:text-white">Content Analysis</h4>
+                  <p className="text-gray-600 dark:text-gray-400">AI-powered content processing and search</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* URL Input - Hero Style */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-600">
+          <div className="text-center mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              {formData.url ? 'Target Website' : 'Enter Website URL'}
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {formData.url ? 'Ready to scrape this website' : 'Start by entering the website you want to scrape'}
+            </p>
+          </div>
+
+          <div className="relative">
+            <Input
+              label=""
+              type="url"
+              value={formData.url}
+              onChange={(e) => updateFormData({ url: e.target.value })}
+              error={formErrors.url}
+              placeholder="https://example.com"
+              icon={<Globe size={20} />}
+              disabled={isRunning}
+              className="text-lg py-4 pl-12 text-center"
+            />
+
+            {/* Quick Examples */}
+            <div className="mt-4 flex flex-wrap gap-2 justify-center">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Examples:</span>
+              {['https://news.ycombinator.com', 'https://reddit.com/r/programming', 'https://github.com/trending'].map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => updateFormData({ url: example })}
+                  disabled={isRunning}
+                  className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                  {example.replace('https://', '')}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Basic Settings */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Max Pages"
-            type="number"
-            min="1"
-            max="1000"
-            value={formData.max_pages}
-            onChange={(e) => updateFormData({ max_pages: parseInt(e.target.value) || 1 })}
-            error={formErrors.max_pages}
-            disabled={isRunning}
-          />
-          
-          <Input
-            label="Delay (seconds)"
-            type="number"
-            min="0"
-            max="60"
-            step="0.1"
-            value={formData.delay}
-            onChange={(e) => updateFormData({ delay: parseFloat(e.target.value) || 0 })}
-            error={formErrors.delay}
-            disabled={isRunning}
-          />
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-600">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Scraping Settings
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <Input
+                label="Max Pages"
+                type="number"
+                min="1"
+                max="1000"
+                value={formData.max_pages}
+                onChange={(e) => updateFormData({ max_pages: parseInt(e.target.value) || 1 })}
+                error={formErrors.max_pages}
+                disabled={isRunning}
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Maximum number of pages to scrape
+              </p>
+            </div>
+
+            <div>
+              <Input
+                label="Delay (seconds)"
+                type="number"
+                min="0"
+                max="60"
+                step="0.1"
+                value={formData.delay}
+                onChange={(e) => updateFormData({ delay: parseFloat(e.target.value) || 0 })}
+                error={formErrors.delay}
+                disabled={isRunning}
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Delay between requests (be respectful)
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Content Download Options */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-600">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Content Options
+            </h3>
             <label className="flex items-center">
               <input
                 type="checkbox"
@@ -133,7 +224,7 @@ export const ScrapeForm: React.FC = () => {
               />
               <span className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                 <Download size={16} className="inline mr-1" />
-                Download Content
+                Download Files & Media
               </span>
             </label>
           </div>
@@ -238,34 +329,79 @@ export const ScrapeForm: React.FC = () => {
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-4">
+        {/* Scraping Summary */}
+        {formData.url && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-800 rounded-xl p-6 border border-blue-200 dark:border-gray-600">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              Scraping Summary
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="flex items-center space-x-2">
+                <Globe className="w-4 h-4 text-blue-600" />
+                <span className="text-gray-600 dark:text-gray-400">Target:</span>
+                <span className="font-medium text-gray-900 dark:text-white truncate">
+                  {new URL(formData.url).hostname}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <FileText className="w-4 h-4 text-green-600" />
+                <span className="text-gray-600 dark:text-gray-400">Max Pages:</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {formData.max_pages}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Download className="w-4 h-4 text-purple-600" />
+                <span className="text-gray-600 dark:text-gray-400">Content:</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {formData.download_content ? 'Yes' : 'Text Only'}
+                </span>
+              </div>
+            </div>
+
+            {formData.download_content && (
+              <div className="mt-3 pt-3 border-t border-blue-200 dark:border-gray-600">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Will download: {Object.entries(formData.content_types).filter(([_, enabled]) => enabled).map(([type, _]) => type).join(', ')}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Action Buttons - Hero Style */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-600">
+          <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
             <Button
               type="submit"
               variant="primary"
               disabled={!canStart}
               loading={isSubmitting}
+              className="w-full sm:w-auto px-8 py-4 text-lg font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg"
             >
-              <Play size={16} className="mr-2" />
-              Start Scraping
+              <Play size={20} className="mr-3" />
+              {isSubmitting ? 'Starting Scraper...' : 'Start Scraping'}
             </Button>
-            
+
             {canStop && (
               <Button
                 type="button"
                 variant="danger"
                 onClick={handleStop}
+                className="w-full sm:w-auto px-8 py-4 text-lg font-semibold bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 shadow-lg"
               >
-                <Square size={16} className="mr-2" />
-                Stop
+                <Square size={20} className="mr-3" />
+                Stop Scraping
               </Button>
             )}
           </div>
 
           {currentSession && (
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Session: {currentSession.id.slice(0, 8)}...
+            <div className="mt-4 text-center">
+              <div className="inline-flex items-center px-3 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full text-sm">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
+                Active Session: {currentSession.id.slice(0, 8)}...
+              </div>
             </div>
           )}
         </div>

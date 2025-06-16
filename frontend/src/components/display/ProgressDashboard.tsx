@@ -1,10 +1,13 @@
 import React from 'react';
-import { Activity, Globe, Download, Clock, TrendingUp, AlertCircle } from 'lucide-react';
+import { Activity, Globe, Download, Clock, TrendingUp, AlertCircle, Pause, Play, Square } from 'lucide-react';
 import { useScrapingStore } from '../../store/scrapingStore';
+import { useWebSocket } from '../../hooks/useWebSocket';
+import { Button } from '../common/Button';
 import { formatDuration, formatNumber } from '../../utils/helpers';
 
 export const ProgressDashboard: React.FC = () => {
   const { currentSession } = useScrapingStore();
+  const { pauseScraping, resumeScraping, stopScraping } = useWebSocket();
 
   if (!currentSession) {
     return null;
@@ -69,21 +72,60 @@ export const ProgressDashboard: React.FC = () => {
           Scraping Progress
         </h2>
         
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${
-            isRunning ? 'bg-green-500 animate-pulse' :
-            isCompleted ? 'bg-blue-500' :
-            hasError ? 'bg-red-500' :
-            'bg-gray-400'
-          }`} />
-          <span className={`text-sm font-medium capitalize ${
-            isRunning ? 'text-green-600' :
-            isCompleted ? 'text-blue-600' :
-            hasError ? 'text-red-600' :
-            'text-gray-600'
-          }`}>
-            {sessionStatus}
-          </span>
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${
+              isRunning ? 'bg-green-500 animate-pulse' :
+              isCompleted ? 'bg-blue-500' :
+              hasError ? 'bg-red-500' :
+              'bg-gray-400'
+            }`} />
+            <span className={`text-sm font-medium capitalize ${
+              isRunning ? 'text-green-600' :
+              isCompleted ? 'text-blue-600' :
+              hasError ? 'text-red-600' :
+              'text-gray-600'
+            }`}>
+              {sessionStatus}
+            </span>
+          </div>
+
+          {/* Control Buttons */}
+          {(isRunning || sessionStatus === 'paused') && (
+            <div className="flex items-center space-x-2">
+              {sessionStatus === 'paused' ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resumeScraping}
+                  className="text-green-600 hover:text-green-700"
+                >
+                  <Play size={16} className="mr-1" />
+                  Resume
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={pauseScraping}
+                  className="text-yellow-600 hover:text-yellow-700"
+                >
+                  <Pause size={16} className="mr-1" />
+                  Pause
+                </Button>
+              )}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={stopScraping}
+                className="text-red-600 hover:text-red-700"
+              >
+                <Square size={16} className="mr-1" />
+                Stop
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

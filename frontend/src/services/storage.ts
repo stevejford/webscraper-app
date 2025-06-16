@@ -24,7 +24,7 @@ class StorageService {
     }
   }
 
-  private removeItem(key: string): void {
+  removeItem(key: string): void {
     try {
       localStorage.removeItem(key);
     } catch (error) {

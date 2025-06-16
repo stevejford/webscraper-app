@@ -139,7 +139,7 @@ export class WebSocketManager {
     this.currentSessionId = null;
   }
 
-  // Reconnect with exponential backoff
+  // Enhanced reconnect with exponential backoff following realtime.md recommendations
   private async reconnect(): Promise<void> {
     if (!this.currentSessionId) {
       console.error('❌ Cannot reconnect: No session ID');
@@ -149,6 +149,11 @@ export class WebSocketManager {
     if (this.connectionState.reconnectAttempts >= this.wsConfig.maxReconnectAttempts) {
       console.error('❌ Max reconnection attempts reached');
       this.updateConnectionState('error', 'Max reconnection attempts reached');
+
+      // Notify handlers about failed reconnection
+      if (this.messageHandlers.onReconnectionFailed) {
+        this.messageHandlers.onReconnectionFailed(this.connectionState);
+      }
       return;
     }
 
@@ -156,15 +161,27 @@ export class WebSocketManager {
       ...this.connectionState,
       reconnectAttempts: this.connectionState.reconnectAttempts + 1,
     };
-    const delay = this.wsConfig.reconnectDelay * Math.pow(2, this.connectionState.reconnectAttempts - 1);
-    
-    console.log(`🔄 Reconnecting in ${delay}ms (attempt ${this.connectionState.reconnectAttempts}/${this.wsConfig.maxReconnectAttempts})`);
-    
+
+    // Exponential backoff with jitter
+    const baseDelay = this.wsConfig.reconnectDelay * Math.pow(2, this.connectionState.reconnectAttempts - 1);
+    const jitter = Math.random() * 1000; // Add up to 1 second of jitter
+    const delay = Math.min(baseDelay + jitter, 30000); // Cap at 30 seconds
+
+    console.log(`🔄 Reconnecting in ${Math.round(delay)}ms (attempt ${this.connectionState.reconnectAttempts}/${this.wsConfig.maxReconnectAttempts})`);
+
     this.updateConnectionState('reconnecting');
-    
+
     this.reconnectTimeout = setTimeout(async () => {
       try {
         await this.connect(this.currentSessionId!);
+
+        // Reset reconnect attempts on successful connection
+        this.connectionState.reconnectAttempts = 0;
+
+        // Notify handlers about successful reconnection
+        if (this.messageHandlers.onReconnectionSuccess) {
+          this.messageHandlers.onReconnectionSuccess(this.connectionState);
+        }
       } catch (error) {
         console.error('❌ Reconnection failed:', error);
         this.reconnect(); // Try again
@@ -184,6 +201,7 @@ export class WebSocketManager {
       try {
         this.ws.send(JSON.stringify(data));
         console.log('📤 Message sent:', data.type || 'unknown');
+        console.log('📤 Message data:', JSON.stringify(data, null, 2));
       } catch (error) {
         console.error('❌ Failed to send message:', error);
         this.queueMessage(message);

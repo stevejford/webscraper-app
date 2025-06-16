@@ -22,9 +22,18 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const pdfUrl = content.file_path 
-    ? `/downloads/${content.file_path}`
-    : content.url;
+  const pdfUrl = (() => {
+    // Use public_url if available (from Supabase Storage)
+    if (content.public_url) {
+      return content.public_url;
+    }
+    // Fall back to downloads endpoint if file_path is available
+    if (content.file_path) {
+      return `/downloads/${content.file_path}`;
+    }
+    // Final fallback to original URL
+    return content.url;
+  })();
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);

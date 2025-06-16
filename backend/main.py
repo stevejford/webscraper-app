@@ -1,4 +1,4 @@
-# Enhanced FastAPI + Crawl4AI Backend with Full Frontend Integration
+# Enhanced FastAPI + Crawl4AI Backend with Supabase Integration
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +19,9 @@ import mimetypes
 from urllib.parse import urljoin, urlparse
 import hashlib
 
+# Supabase integration
+from supabase import create_client, Client
+
 # Crawl4AI imports
 try:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
@@ -34,6 +37,17 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize Supabase client
+SUPABASE_URL = "https://jeymatvbyfaxhxztbjsw.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpleW1hdHZieWZheGh4enRianN3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDAwMjUyOSwiZXhwIjoyMDY1NTc4NTI5fQ.MLCW3Ewz9jTRHBOgkgzbOUzTJqRoow4u6uRps0v2Jjk"
+
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    logger.info("✅ Supabase client initialized successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize Supabase client: {e}")
+    supabase = None
 
 # Create downloads directory
 DOWNLOADS_DIR = Path("downloads")
@@ -189,6 +203,16 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan
 )
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for testing"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "supabase_connected": supabase is not None,
+        "crawl4ai_available": True
+    }
 
 # CORS middleware - Allow specific origins with credentials
 app.add_middleware(
@@ -349,6 +373,9 @@ class EnhancedWebScraperManager:
             async with aiofiles.open(html_file_path, 'w', encoding='utf-8') as f:
                 await f.write(html)
 
+            # Save to Supabase
+            await self.save_page_to_supabase(session_id, url, title_text or "", text_content, html)
+
             return PageContent(
                 url=url,
                 title=title_text,
@@ -445,11 +472,23 @@ class EnhancedWebScraperManager:
                     existing_file_path, existing_session_id, original_url, file_size = duplicate_info
                     logger.info(f"Duplicate content found for {url}, referencing existing file from {original_url}")
 
+                    # Ensure the existing file path includes session folder for consistency
+                    if not existing_file_path.startswith(existing_session_id + "/"):
+                        corrected_existing_path = f"{existing_session_id}/{existing_file_path}"
+                    else:
+                        corrected_existing_path = existing_file_path
+
+                    # Save a deduplicated record to the database for this session
+                    await self.save_deduplicated_file_to_supabase(
+                        session_id, url, corrected_existing_path, os.path.basename(existing_file_path),
+                        file_size, mime_type, content_hash, original_url
+                    )
+
                     # Return reference to existing file instead of downloading again
                     return ScrapedContent(
                         url=url,
                         content_type=content_type,
-                        file_path=existing_file_path,  # Reference to existing file
+                        file_path=corrected_existing_path,  # Reference to existing file with correct path
                         file_size=file_size,
                         mime_type=mime_type,
                         downloaded_at=datetime.now(),
@@ -471,8 +510,12 @@ class EnhancedWebScraperManager:
                 async with aiofiles.open(file_path, 'wb') as f:
                     await f.write(content_data)
 
-                # Register the content in deduplication registry
-                self.register_content(content_hash, safe_filename, session_id, url, len(content_data))
+                # Save to Supabase Storage and Database
+                await self.save_file_to_supabase(session_id, url, str(file_path), safe_filename, len(content_data), mime_type, content_hash)
+
+                # Register the content in deduplication registry with session-based path
+                session_based_path = f"{session_id}/{safe_filename}"
+                self.register_content(content_hash, session_based_path, session_id, url, len(content_data))
                 logger.info(f"Registered new content: {url} -> {safe_filename} (hash: {content_hash[:8]}...)")
                 
                 # Extract additional metadata
@@ -607,11 +650,255 @@ class EnhancedWebScraperManager:
         items = await self.extract_content_urls_with_context(html, base_url, content_types)
         return [url for url, context in items]
     
+    async def save_session_to_supabase(self, session_id: str, request: ScrapeRequest, status: str = "running"):
+        """Save session data to Supabase"""
+        logger.info(f"🔄 save_session_to_supabase called for session {session_id}")
+        if not supabase:
+            logger.warning("❌ Supabase not available, skipping database save")
+            return None
+
+        try:
+            # Use the new database function for session creation
+            config_data = {
+                "url": str(request.url),
+                "max_pages": getattr(request, 'max_pages', 10),
+                "delay": getattr(request, 'delay', 1),
+                "user_agent": getattr(request, 'user_agent', 'WebScraper/1.0'),
+                "include_external": getattr(request, 'include_external', False),
+                "scrape_whole_site": getattr(request, 'scrape_whole_site', True),
+                "download_content": getattr(request, 'download_content', True),
+                "content_types": [str(ct) for ct in getattr(request, 'content_types', ['image', 'pdf', 'document'])],
+                "depth_limit": getattr(request, 'depth_limit', 3),
+                "respect_robots": getattr(request, 'respect_robots', True)
+            }
+
+            result = supabase.rpc('start_scraping_session', {
+                'p_session_id': session_id,
+                'p_target_url': str(request.url),
+                'p_config': config_data,
+                'p_user_id': None  # Anonymous user for now
+            }).execute()
+
+            logger.info(f"✅ Session {session_id} created using enhanced schema function")
+            logger.info(f"📊 Database function result: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"❌ Database function failed: {e}")
+            # Fallback to direct insert for backward compatibility
+            try:
+                logger.info("🔄 Attempting fallback session creation...")
+                session_data = {
+                    "id": session_id,
+                    "user_id": None,  # NULL for anonymous
+                    "target_url": str(request.url),
+                    "status": status,
+                    "config": config_data,
+                    "progress": {
+                        "pages_scraped": 0,
+                        "files_downloaded": 0,
+                        "urls_found": 0,
+                        "external_urls_found": 0,
+                        "errors_count": 0,
+                        "last_checkpoint": datetime.now().isoformat()
+                    }
+                }
+
+                result = supabase.table("scraping_sessions").insert(session_data).execute()
+                logger.info(f"✅ Session {session_id} created using fallback method")
+                return result
+            except Exception as fallback_error:
+                logger.error(f"❌ CRITICAL: Both function and fallback session creation failed: {fallback_error}")
+                logger.error(f"❌ This will cause foreign key errors when saving pages and files!")
+                return None
+
+    async def save_page_to_supabase(self, session_id: str, url: str, title: str, content: str, html: str):
+        """Save page content to Supabase using enhanced schema"""
+        if not supabase:
+            return
+
+        try:
+            page_data = {
+                "id": str(uuid.uuid4()),
+                "session_id": session_id,
+                "url": url,
+                "status": "scraped",
+                "http_status": 200,  # Assume success if we got content
+                "scraped_at": datetime.now().isoformat(),
+                "extracted_data": {
+                    "title": title,
+                    "content_length": len(content),
+                    "html_length": len(html)
+                },
+                # Legacy compatibility fields
+                "title": title,
+                "text_content": content,
+                "html_content": html,
+                "content": content,
+                "metadata": {
+                    "content_length": len(content),
+                    "scraped_at": datetime.now().isoformat()
+                }
+            }
+
+            result = supabase.table("scraped_pages").insert(page_data).execute()
+            logger.info(f"✅ Page {url} saved to Supabase with enhanced schema")
+            return result
+        except Exception as e:
+            logger.error(f"❌ Failed to save page to Supabase: {e}")
+            return None
+
+    async def save_file_to_supabase(self, session_id: str, original_url: str, file_path: str, file_name: str, file_size: int, mime_type: str, content_hash: str):
+        """Save file metadata to Supabase"""
+        if not supabase:
+            return
+
+        try:
+            # Upload file to Supabase Storage
+            storage_path = f"{session_id}/{file_name}"
+
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+
+            # Upload to storage bucket
+            storage_result = supabase.storage.from_("scraped-content").upload(storage_path, file_data)
+
+            # Get public URL
+            public_url = supabase.storage.from_("scraped-content").get_public_url(storage_path)
+
+            # Save metadata to database
+            file_data = {
+                "id": str(uuid.uuid4()),
+                "session_id": session_id,
+                "original_url": original_url,
+                "file_name": file_name,
+                "file_path": storage_path,
+                "file_size": file_size,
+                "mime_type": mime_type,
+                "content_hash": content_hash,
+                "public_url": public_url,
+                "is_deduped": False
+            }
+
+            result = supabase.table("stored_files").insert(file_data).execute()
+            logger.info(f"✅ File {file_name} saved to Supabase Storage and DB")
+            return result
+        except Exception as e:
+            logger.error(f"❌ Failed to save file to Supabase: {e}")
+            return None
+
+    async def save_deduplicated_file_to_supabase(self, session_id: str, original_url: str, existing_file_path: str, file_name: str, file_size: int, mime_type: str, content_hash: str, original_source_url: str):
+        """Save deduplicated file reference to Supabase"""
+        if not supabase:
+            return
+
+        try:
+            # Get the public URL from the existing file path
+            # The existing_file_path should be in format "session_id/filename"
+            public_url = supabase.storage.from_("scraped-content").get_public_url(existing_file_path)
+
+            # Save metadata to database with deduplication flag
+            file_data = {
+                "id": str(uuid.uuid4()),
+                "session_id": session_id,
+                "original_url": original_url,
+                "file_name": file_name,
+                "file_path": existing_file_path,  # Reference to existing file
+                "file_size": file_size,
+                "mime_type": mime_type,
+                "content_hash": content_hash,
+                "public_url": public_url,
+                "is_deduped": True,
+                "metadata": {
+                    "original_source_url": original_source_url,
+                    "deduplication_note": f"References existing file from {original_source_url}"
+                }
+            }
+
+            result = supabase.table("stored_files").insert(file_data).execute()
+            logger.info(f"✅ Deduplicated file reference {file_name} saved to Supabase DB")
+            return result
+        except Exception as e:
+            logger.error(f"❌ Failed to save deduplicated file to Supabase: {e}")
+            return None
+
+    async def update_session_statistics(self, session_id: str, statistics: dict, status: str = "running"):
+        """Update session statistics in Supabase using enhanced schema with real-time updates"""
+        if not supabase:
+            return
+
+        try:
+            now = datetime.now().isoformat()
+
+            # Use the database function for progress updates
+            progress_data = {
+                "pages_scraped": statistics.get("total_pages_scraped", 0),
+                "files_downloaded": statistics.get("content_downloaded", 0),
+                "urls_found": statistics.get("total_urls_found", 0),
+                "external_urls_found": statistics.get("external_urls_found", 0),
+                "errors_count": 0,
+                "last_checkpoint": now,
+                "current_status": status
+            }
+
+            # Try using the database function first
+            try:
+                result = supabase.rpc('update_session_progress', {
+                    'session_id': session_id,
+                    'progress_data': progress_data
+                }).execute()
+                logger.info(f"✅ Session {session_id} progress updated using database function")
+            except Exception as func_error:
+                logger.warning(f"Database function failed, using direct update: {func_error}")
+                # Fallback to direct update
+                update_data = {
+                    "status": status,
+                    "progress": progress_data,
+                    "last_updated": now,
+                    # Legacy compatibility
+                    "statistics": statistics
+                }
+
+                if status == "completed":
+                    # Use the completion function
+                    try:
+                        summary_results = {
+                            "completion_time": now,
+                            "final_statistics": statistics,
+                            "total_duration": statistics.get("duration_seconds", 0)
+                        }
+                        result = supabase.rpc('complete_scraping_session', {
+                            'p_session_id': session_id,
+                            'p_summary_results': summary_results
+                        }).execute()
+                        logger.info(f"✅ Session {session_id} completed using database function")
+                    except Exception as complete_error:
+                        logger.warning(f"Completion function failed, using direct update: {complete_error}")
+                        update_data["end_time"] = now
+                        update_data["summary_results"] = summary_results
+                        result = supabase.table("scraping_sessions").update(update_data).eq("id", session_id).execute()
+                else:
+                    result = supabase.table("scraping_sessions").update(update_data).eq("id", session_id).execute()
+
+            logger.info(f"✅ Session {session_id} statistics updated in Supabase")
+            return result
+        except Exception as e:
+            logger.error(f"❌ Failed to update session statistics: {e}")
+            return None
+
     async def scrape_website(self, session_id: str, request: ScrapeRequest, websocket: Optional[WebSocket] = None):
-        """Enhanced scraping with content downloading"""
-        
+        """Enhanced scraping with content downloading and Supabase storage"""
+
         domain = urlparse(str(request.url)).netloc
         self.active_crawlers[session_id] = True
+
+        # Save initial session to Supabase - CRITICAL for foreign key constraints
+        logger.info(f"🔄 Attempting to save session {session_id} to Supabase...")
+        session_saved = await self.save_session_to_supabase(session_id, request, "running")
+        if not session_saved:
+            logger.error(f"❌ CRITICAL: Failed to save session {session_id} to database. Scraping will continue but data won't be saved to Supabase.")
+            logger.error(f"❌ This will cause foreign key errors when saving pages and files!")
+        else:
+            logger.info(f"✅ Session {session_id} successfully saved to Supabase database")
         
         found_urls = set()
         external_urls = set()
@@ -701,6 +988,24 @@ class EnhancedWebScraperManager:
 
                     while (to_crawl and pages_scraped < max_pages and
                            self.active_crawlers.get(session_id, False)):
+
+                        # Check if session is paused
+                        if session_id in active_sessions and active_sessions[session_id].get("status") == "paused":
+                            logger.info(f"Crawling paused for session {session_id}, waiting...")
+                            await send_status_update("Scraping paused - waiting for resume", "")
+
+                            # Wait until resumed or stopped
+                            while (session_id in active_sessions and
+                                   active_sessions[session_id].get("status") == "paused" and
+                                   self.active_crawlers.get(session_id, False)):
+                                await asyncio.sleep(1)
+
+                            if not self.active_crawlers.get(session_id, False):
+                                logger.info(f"Crawling stopped while paused for session {session_id}")
+                                break
+
+                            logger.info(f"Crawling resumed for session {session_id}")
+                            await send_status_update("Scraping resumed", "")
 
                         current_url = to_crawl.pop(0)
 
@@ -869,6 +1174,9 @@ class EnhancedWebScraperManager:
                     content_type = content.content_type
                     statistics["content_by_type"][content_type] = statistics["content_by_type"].get(content_type, 0) + 1
                 
+                # Update final statistics in Supabase
+                await self.update_session_statistics(session_id, statistics, "completed")
+
                 # Create final result
                 result = ScrapeResult(
                     session_id=session_id,
@@ -880,7 +1188,7 @@ class EnhancedWebScraperManager:
                     statistics=statistics,
                     status=status
                 )
-                
+
                 # Store result
                 session_results[session_id] = result
                 
@@ -932,10 +1240,49 @@ async def root():
 async def health_check():
     return {
         "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "supabase_connected": supabase is not None,
         "crawl4ai_available": CRAWL4AI_AVAILABLE,
         "active_sessions": len(active_sessions),
         "completed_sessions": len(session_results)
     }
+
+@app.get("/api/sessions")
+async def get_sessions():
+    """Get all sessions from database"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not available")
+
+    try:
+        # Get all sessions from database
+        result = supabase.table("scraping_sessions").select("*").order("start_time", desc=True).execute()
+
+        active_sessions_list = []
+        completed_sessions_list = []
+
+        for session in result.data:
+            session_info = {
+                "id": session["id"],
+                "target_url": session["target_url"],
+                "status": session["status"],
+                "start_time": session["start_time"],
+                "end_time": session.get("end_time"),
+                "progress": session.get("progress", {}),
+                "domain": session.get("domain")
+            }
+
+            if session["status"] in ["running", "pending", "paused"]:
+                active_sessions_list.append(session_info)
+            else:
+                completed_sessions_list.append(session_info)
+
+        return {
+            "active_sessions": active_sessions_list,
+            "completed_sessions": completed_sessions_list
+        }
+    except Exception as e:
+        logger.error(f"Failed to get sessions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get sessions: {str(e)}")
 
 @app.post("/api/scrape/start")
 async def start_scraping(request: ScrapeRequest):
@@ -1010,6 +1357,52 @@ async def websocket_scrape(websocket: WebSocket, session_id: str):
         logger.info(f"WebSocket connection closed for session {session_id}")
 
 
+@app.post("/api/scrape/pause/{session_id}")
+async def pause_scraping(session_id: str):
+    if session_id in active_sessions:
+        active_sessions[session_id]["status"] = "paused"
+
+        # Notify via WebSocket
+        if session_id in websocket_connections:
+            try:
+                await websocket_connections[session_id].send_text(json.dumps({
+                    "type": "status_update",
+                    "data": {
+                        "session_id": session_id,
+                        "status": "paused",
+                        "message": "Scraping paused by user"
+                    }
+                }))
+            except Exception as e:
+                logger.warning(f"Error sending pause notification for session {session_id}: {e}")
+
+        return {"message": "Scraping paused", "session_id": session_id}
+    else:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+@app.post("/api/scrape/resume/{session_id}")
+async def resume_scraping(session_id: str):
+    if session_id in active_sessions:
+        active_sessions[session_id]["status"] = "running"
+
+        # Notify via WebSocket
+        if session_id in websocket_connections:
+            try:
+                await websocket_connections[session_id].send_text(json.dumps({
+                    "type": "status_update",
+                    "data": {
+                        "session_id": session_id,
+                        "status": "running",
+                        "message": "Scraping resumed by user"
+                    }
+                }))
+            except Exception as e:
+                logger.warning(f"Error sending resume notification for session {session_id}: {e}")
+
+        return {"message": "Scraping resumed", "session_id": session_id}
+    else:
+        raise HTTPException(status_code=404, detail="Session not found")
+
 @app.post("/api/scrape/stop/{session_id}")
 async def stop_scraping(session_id: str):
     if session_id in active_sessions:
@@ -1060,52 +1453,194 @@ async def get_session_result(session_id: str):
 
 @app.get("/api/content/{session_id}/{filename:path}")
 async def get_content_file(session_id: str, filename: str):
-    """Serve downloaded content files with proper headers"""
+    """Serve downloaded content files from Supabase Storage with proper headers"""
     try:
-        file_path = DOWNLOADS_DIR / session_id / filename
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
 
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="File not found")
+        # First, try to find the file in the database to get metadata
+        try:
+            result = supabase.table("stored_files").select("*").eq("session_id", session_id).eq("file_name", filename).execute()
 
-        # Security check: ensure file is within session directory
-        if not str(file_path.resolve()).startswith(str((DOWNLOADS_DIR / session_id).resolve())):
-            raise HTTPException(status_code=403, detail="Access denied")
+            if not result.data:
+                # If not found by filename, try by file_path
+                storage_path = f"{session_id}/{filename}"
+                result = supabase.table("stored_files").select("*").eq("file_path", storage_path).execute()
 
-        # Get mime type
-        mime_type, _ = mimetypes.guess_type(str(file_path))
-        if not mime_type:
+            if not result.data:
+                raise HTTPException(status_code=404, detail="File not found in database")
+
+            file_record = result.data[0]
+            storage_path = file_record["file_path"]
+            mime_type = file_record["mime_type"] or 'application/octet-stream'
+
+        except Exception as db_error:
+            logger.warning(f"Database lookup failed for {session_id}/{filename}: {db_error}")
+            # Fallback: try direct storage path
+            storage_path = f"{session_id}/{filename}"
             mime_type = 'application/octet-stream'
 
-        # Read file
-        async with aiofiles.open(file_path, 'rb') as f:
-            content = await f.read()
+        # Download file from Supabase Storage
+        try:
+            # Use the correct Supabase storage download method
+            storage_response = supabase.storage.from_("scraped-content").download(storage_path)
+
+            if not storage_response:
+                raise HTTPException(status_code=404, detail="File not found in storage")
+
+            # The response should be bytes
+            file_content = storage_response
+
+        except Exception as storage_error:
+            logger.error(f"Storage download failed for {storage_path}: {storage_error}")
+            logger.error(f"Full storage error: {type(storage_error).__name__}: {str(storage_error)}")
+
+            # Try alternative: redirect to public URL if available
+            try:
+                if 'file_record' in locals() and file_record.get("public_url"):
+                    from fastapi.responses import RedirectResponse
+                    return RedirectResponse(url=file_record["public_url"])
+                else:
+                    # Generate public URL as fallback
+                    public_url = supabase.storage.from_("scraped-content").get_public_url(storage_path)
+                    from fastapi.responses import RedirectResponse
+                    return RedirectResponse(url=public_url)
+            except Exception as redirect_error:
+                logger.error(f"Redirect fallback failed: {redirect_error}")
+                raise HTTPException(status_code=404, detail="File not found in storage")
+
+        # Guess mime type if not available
+        if mime_type == 'application/octet-stream':
+            mime_type, _ = mimetypes.guess_type(filename)
+            if not mime_type:
+                mime_type = 'application/octet-stream'
 
         from fastapi.responses import Response
         return Response(
-            content=content,
+            content=file_content,
             media_type=mime_type,
             headers={
                 "Content-Disposition": f"inline; filename={filename}",
-                "Cache-Control": "public, max-age=3600"
+                "Cache-Control": "public, max-age=3600",
+                "Access-Control-Allow-Origin": "*"
             }
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error serving file {session_id}/{filename}: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Error serving file")
+
+@app.get("/api/content-url/{session_id}/{filename:path}")
+async def get_content_file_url(session_id: str, filename: str):
+    """Get the public URL for a content file from Supabase Storage"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        # Find the file in the database to get the public URL
+        try:
+            result = supabase.table("stored_files").select("public_url, file_path").eq("session_id", session_id).eq("file_name", filename).execute()
+
+            if not result.data:
+                # If not found by filename, try by file_path
+                storage_path = f"{session_id}/{filename}"
+                result = supabase.table("stored_files").select("public_url, file_path").eq("file_path", storage_path).execute()
+
+            if not result.data:
+                raise HTTPException(status_code=404, detail="File not found")
+
+            file_record = result.data[0]
+            public_url = file_record.get("public_url")
+
+            if public_url:
+                return {"public_url": public_url}
+            else:
+                # Generate public URL if not stored
+                storage_path = file_record["file_path"]
+                public_url = supabase.storage.from_("scraped-content").get_public_url(storage_path)
+                return {"public_url": public_url}
+
+        except Exception as e:
+            logger.error(f"Error getting file URL for {session_id}/{filename}: {e}")
+            raise HTTPException(status_code=404, detail="File not found")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting file URL {session_id}/{filename}: {e}")
+        raise HTTPException(status_code=500, detail="Error getting file URL")
 
 @app.get("/api/page-content/{session_id}")
 async def get_page_contents(session_id: str):
-    """Get all page contents for a session"""
-    if session_id in session_results:
-        result = session_results[session_id]
+    """Get all page contents for a session including stored files with public URLs"""
+    try:
+        # Get page contents from memory if available
+        page_contents = []
+        if session_id in session_results:
+            result = session_results[session_id]
+            page_contents = result.page_contents
+
+        # Get stored files from database with public URLs
+        stored_files = []
+        if supabase:
+            try:
+                files_result = supabase.table("stored_files").select("*").eq("session_id", session_id).execute()
+                if files_result.data:
+                    for file_record in files_result.data:
+                        # Ensure public URL is correct for the file path
+                        file_path = file_record.get("file_path", "")
+                        if file_path and not file_path.startswith(session_id + "/"):
+                            # Fix inconsistent file paths - should include session folder
+                            corrected_path = f"{session_id}/{file_record.get('file_name', '')}"
+                            public_url = supabase.storage.from_("scraped-content").get_public_url(corrected_path)
+                        else:
+                            public_url = file_record.get("public_url") or supabase.storage.from_("scraped-content").get_public_url(file_path)
+
+                        stored_files.append({
+                            "id": file_record.get("id"),
+                            "url": file_record.get("original_url", ""),
+                            "content_type": "image" if file_record.get("mime_type", "").startswith("image/")
+                                          else "pdf" if file_record.get("mime_type") == "application/pdf"
+                                          else "document" if file_record.get("mime_type", "").startswith("application/")
+                                          else "other",
+                            "file_path": file_record.get("file_path"),
+                            "filename": file_record.get("file_name"),
+                            "file_size": file_record.get("file_size"),
+                            "size": file_record.get("file_size"),  # Alias
+                            "mime_type": file_record.get("mime_type"),
+                            "type": file_record.get("mime_type"),  # Alias
+                            "public_url": public_url,
+                            "title": file_record.get("file_name"),
+                            "downloaded_at": file_record.get("uploaded_at", ""),
+                            "success": True,
+                            "metadata": file_record.get("metadata", {})
+                        })
+
+            except Exception as db_error:
+                logger.warning(f"Failed to fetch stored files for session {session_id}: {db_error}")
+
+        # Enhance page contents with stored files
+        enhanced_page_contents = []
+        for page in page_contents:
+            enhanced_page = dict(page)
+            enhanced_page["stored_files"] = stored_files
+            enhanced_page_contents.append(enhanced_page)
+
         return {
             "session_id": session_id,
-            "page_contents": result.page_contents,
-            "total_pages": len(result.page_contents)
+            "page_contents": enhanced_page_contents,
+            "stored_files": stored_files,
+            "total_pages": len(page_contents),
+            "total_files": len(stored_files)
         }
-    else:
-        raise HTTPException(status_code=404, detail="Session not found")
+
+    except Exception as e:
+        logger.error(f"Error getting page contents for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving page contents")
 
 @app.get("/api/deduplication/stats")
 async def get_deduplication_stats():
@@ -1150,4 +1685,4 @@ if __name__ == "__main__":
     print("🌐 API Documentation: http://localhost:8000/docs")
     print("🔌 WebSocket endpoint: ws://localhost:8000/ws/scrape/{session_id}")
     
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

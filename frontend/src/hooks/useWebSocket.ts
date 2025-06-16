@@ -86,6 +86,8 @@ export const useWebSocket = () => {
       console.log('📊 Status update received:', message.data);
       console.log('📊 Pages scraped:', message.data.pages_scraped, 'URLs found:', message.data.urls_found, 'Progress:', message.data.progress);
       updateSessionStatus(message.data);
+
+      // Note: Backend handles all session persistence - no frontend checkpointing needed
       console.log('📊 Status update processed');
     }, [updateSessionStatus]),
 
@@ -106,13 +108,20 @@ export const useWebSocket = () => {
 
     onScrapeComplete: useCallback((message) => {
       console.log('🎉 Scraping complete:', message.data);
+      console.log('📊 Scraped content count:', message.data.scraped_content?.length || 0);
+      console.log('📄 Page content count:', message.data.page_contents?.length || 0);
+      console.log('🔗 URLs found:', message.data.urls?.length || 0);
+
       completeSession(message.data);
       setIsSubmitting(false);
-      
+
+      const contentCount = message.data.scraped_content?.length || 0;
+      const urlCount = message.data.urls?.length || 0;
+
       addNotification({
         type: 'success',
         title: 'Scraping Complete',
-        message: `Found ${message.data.urls.length} URLs and downloaded ${message.data.scraped_content.length} items`,
+        message: `Found ${urlCount} URLs and downloaded ${contentCount} files`,
         duration: 10000,
       });
     }, [completeSession, setIsSubmitting, addNotification]),
@@ -183,22 +192,22 @@ export const useWebSocket = () => {
     }
   }, [addNotification]);
 
-  // Start scraping
+  // Start scraping - let backend handle session creation
   const startScraping = useCallback(async (request: ScrapeRequest): Promise<boolean> => {
     try {
       setIsSubmitting(true);
-      
-      // Generate session ID
+
+      // Generate session ID for WebSocket connection
       const sessionId = crypto.randomUUID();
-      
-      // Connect to WebSocket
+
+      // Connect to WebSocket first
       const connected = await connect(sessionId);
       if (!connected) {
         setIsSubmitting(false);
         return false;
       }
 
-      // Create session object
+      // Create basic session object for frontend state
       const session = {
         id: sessionId,
         config: request,
@@ -218,9 +227,9 @@ export const useWebSocket = () => {
 
       setCurrentSession(session);
 
-      // Send scraping request
+      // Send scraping request - backend will create and manage the session in Supabase
       await sendMessage(request);
-      
+
       addNotification({
         type: 'info',
         title: 'Scraping Started',
@@ -232,17 +241,69 @@ export const useWebSocket = () => {
     } catch (error) {
       console.error('❌ Failed to start scraping:', error);
       setIsSubmitting(false);
-      
+
       addNotification({
         type: 'error',
         title: 'Failed to Start',
         message: error instanceof Error ? error.message : 'Failed to start scraping',
         duration: 10000,
       });
-      
+
       return false;
     }
   }, [connect, sendMessage, setCurrentSession, setIsSubmitting, addNotification]);
+
+  // Pause scraping
+  const pauseScraping = useCallback(async (): Promise<void> => {
+    try {
+      const { currentSession } = useScrapingStore.getState();
+      if (!currentSession) return;
+
+      const response = await apiService.pauseSession(currentSession.id);
+      if (response.success) {
+        addNotification({
+          type: 'info',
+          title: 'Scraping Paused',
+          message: 'Scraping session has been paused',
+          duration: 3000,
+        });
+      }
+    } catch (error) {
+      console.error('❌ Failed to pause scraping:', error);
+      addNotification({
+        type: 'error',
+        title: 'Pause Failed',
+        message: 'Failed to pause scraping session',
+        duration: 5000,
+      });
+    }
+  }, [addNotification]);
+
+  // Resume scraping
+  const resumeScraping = useCallback(async (): Promise<void> => {
+    try {
+      const { currentSession } = useScrapingStore.getState();
+      if (!currentSession) return;
+
+      const response = await apiService.resumeSession(currentSession.id);
+      if (response.success) {
+        addNotification({
+          type: 'info',
+          title: 'Scraping Resumed',
+          message: 'Scraping session has been resumed',
+          duration: 3000,
+        });
+      }
+    } catch (error) {
+      console.error('❌ Failed to resume scraping:', error);
+      addNotification({
+        type: 'error',
+        title: 'Resume Failed',
+        message: 'Failed to resume scraping session',
+        duration: 5000,
+      });
+    }
+  }, [addNotification]);
 
   // Stop scraping
   const stopScraping = useCallback(async (): Promise<void> => {
@@ -251,10 +312,10 @@ export const useWebSocket = () => {
       if (webSocketManager.isConnected()) {
         await sendMessage({ type: 'stop' });
       }
-      
+
       // Disconnect
       disconnect();
-      
+
       addNotification({
         type: 'info',
         title: 'Scraping Stopped',
@@ -280,7 +341,9 @@ export const useWebSocket = () => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      webSocketManager.disconnect();
+      console.log('🔌 useWebSocket cleanup called');
+      // Don't disconnect automatically - let explicit disconnect calls handle it
+      // webSocketManager.disconnect();
     };
   }, []);
 
@@ -289,6 +352,8 @@ export const useWebSocket = () => {
     disconnect,
     sendMessage,
     startScraping,
+    pauseScraping,
+    resumeScraping,
     stopScraping,
     getConnectionState,
     isConnected,

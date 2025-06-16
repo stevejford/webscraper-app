@@ -72,7 +72,7 @@ export interface WebSocketConfig {
   connectionTimeout: number;
 }
 
-// Message handlers
+// Enhanced message handlers following realtime.md recommendations
 export interface MessageHandlers {
   onConnectionEstablished?: (data: ConnectionEstablishedMessage) => void;
   onStatusUpdate?: (data: StatusUpdateMessage) => void;
@@ -80,6 +80,16 @@ export interface MessageHandlers {
   onScrapeComplete?: (data: ScrapeCompleteMessage) => void;
   onError?: (data: ErrorMessage) => void;
   onHeartbeat?: (data: HeartbeatMessage) => void;
+  onConnectionStateChange?: (state: ConnectionState) => void;
+  onReconnectionSuccess?: (state: ConnectionState) => void;
+  onReconnectionFailed?: (state: ConnectionState) => void;
+}
+
+// Queued message interface for reliable message delivery
+export interface QueuedMessage {
+  data: any;
+  timestamp: Date;
+  retries: number;
 }
 
 // WebSocket manager interface

@@ -1,0 +1,141 @@
+[
+  {
+    "test": "Supabase Connection",
+    "success": true,
+    "message": "Successfully connected to Supabase",
+    "data": null,
+    "timestamp": "2025-06-17T00:01:06.218256"
+  },
+  {
+    "test": "Database Schema",
+    "success": true,
+    "message": "All required tables exist and are accessible",
+    "data": null,
+    "timestamp": "2025-06-17T00:01:06.393084"
+  },
+  {
+    "test": "Session Creation",
+    "success": true,
+    "message": "Session created successfully: 7daee0a8-be4d-4a21-9ad9-4f460ca021d5",
+    "data": null,
+    "timestamp": "2025-06-17T00:01:06.435715"
+  },
+  {
+    "test": "Page Insertion",
+    "success": true,
+    "message": "Page inserted successfully",
+    "data": null,
+    "timestamp": "2025-06-17T00:01:06.483053"
+  },
+  {
+    "test": "File Insertion",
+    "success": true,
+    "message": "File record inserted successfully",
+    "data": null,
+    "timestamp": "2025-06-17T00:01:06.532194"
+  },
+  {
+    "test": "Data Retrieval",
+    "success": true,
+    "message": "Retrieved - Sessions: 1, Pages: 1, Files: 1",
+    "data": {
+      "session_data": [
+        {
+          "id": "7daee0a8-be4d-4a21-9ad9-4f460ca021d5",
+          "user_id": null,
+          "start_time": "2025-06-16T14:01:05.929231+00:00",
+          "end_time": null,
+          "status": "running",
+          "target_url": "https://test.com",
+          "config": {
+            "url": "https://test.com",
+            "max_pages": 5,
+            "download_content": true
+          },
+          "progress": {
+            "urls_found": 0,
+            "pages_scraped": 0,
+            "files_downloaded": 0,
+            "content_downloaded": 0
+          },
+          "summary_results": {},
+          "last_updated": "2025-06-16T14:01:05.929231+00:00",
+          "domain": "test.com",
+          "statistics": {},
+          "created_at": "2025-06-16T14:01:05.929231+00:00",
+          "completed_at": null,
+          "updated_at": "2025-06-16T14:01:05.929231+00:00"
+        }
+      ],
+      "pages_data": [
+        {
+          "id": "9ed9a718-404b-4d3d-b932-27a88a100a8a",
+          "session_id": "7daee0a8-be4d-4a21-9ad9-4f460ca021d5",
+          "url": "https://test.com/page1",
+          "status": "pending",
+          "http_status": null,
+          "content_hash": null,
+          "scraped_at": null,
+          "raw_html_storage_path": null,
+          "extracted_data": {},
+          "error_details": null,
+          "title": "Test Page",
+          "text_content": null,
+          "html_content": "<html><body>Test</body></html>",
+          "content": "This is test content for the page",
+          "metadata": {
+            "scraped_at": "2025-06-17T00:01:06.436710",
+            "content_length": 100
+          }
+        }
+      ],
+      "files_data": [
+        {
+          "id": "4196033a-4396-4779-b3df-099a1ae99cfc",
+          "session_id": "7daee0a8-be4d-4a21-9ad9-4f460ca021d5",
+          "page_id": null,
+          "original_url": "https://test.com/file.pdf",
+          "file_name": "test_file.pdf",
+          "file_path": "7daee0a8-be4d-4a21-9ad9-4f460ca021d5/test_file.pdf",
+          "file_size": 1024,
+          "mime_type": "application/pdf",
+          "content_hash": "test_hash_123",
+          "public_url": "https://storage.supabase.co/object/public/scraped-content/7daee0a8-be4d-4a21-9ad9-4f460ca021d5/test_file.pdf",
+          "is_deduped": false,
+          "text_content": null,
+          "metadata": {
+            "downloaded_at": "2025-06-17T00:01:06.484057"
+          },
+          "original_file_id": null,
+          "uploaded_at": "2025-06-16T14:01:06.026087+00:00",
+          "file_type": "application/pdf",
+          "file_size_bytes": 1024,
+          "storage_path": "7daee0a8-be4d-4a21-9ad9-4f460ca021d5/test_file.pdf",
+          "downloaded_at": "2025-06-16T14:01:06.026087+00:00"
+        }
+      ]
+    },
+    "timestamp": "2025-06-17T00:01:06.707738"
+  },
+  {
+    "test": "Backend API",
+    "success": false,
+    "message": "Cannot connect to backend API - is it running on port 8001?",
+    "data": null,
+    "timestamp": "2025-06-17T00:01:10.775698"
+  },
+  {
+    "test": "Storage Bucket",
+    "success": true,
+    "message": "Storage bucket accessible, contains 8 items",
+    "data": null,
+    "timestamp": "2025-06-17T00:01:11.208133"
+  },
+  {
+    "test": "Cleanup",
+    "success": true,
+    "message": "Test data cleaned up successfully",
+    "data": null,
+    "timestamp": "2025-06-17T00:01:11.343341"
+  }
+]

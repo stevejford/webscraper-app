@@ -1,0 +1,297 @@
+{
+  "sessions": [
+    {
+      "id": "f6e00cb3-83f3-46a6-a6f4-997b7ec384d5",
+      "domain": "news.ycombinator.com",
+      "status": "completed",
+      "created_at": "2025-06-16T11:32:26.292686+00:00",
+      "statistics": {
+        "content_by_type": {
+          "image": 18
+        },
+        "total_file_size": 3222,
+        "duration_seconds": 26.314832,
+        "total_urls_found": 23,
+        "unique_file_size": 0,
+        "content_downloaded": 18,
+        "external_urls_found": 0,
+        "total_pages_scraped": 10,
+        "deduplication_enabled": true,
+        "duplicate_content_skipped": 18,
+        "unique_content_downloaded": 0,
+        "space_saved_by_deduplication": 3222
+      },
+      "pages_count": 10,
+      "files_count": 0,
+      "pages": [
+        {
+          "url": "https://news.ycombinator.com/",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/news",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/newest",
+          "title": "New Links | Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/front",
+          "title": "2025-06-15 front | Hacker News"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "fd5f2748-5a3f-4807-aff0-48e98ce58924",
+      "domain": "news.ycombinator.com",
+      "status": "completed",
+      "created_at": "2025-06-16T11:29:28.675594+00:00",
+      "statistics": {
+        "content_by_type": {
+          "image": 16
+        },
+        "total_file_size": 2864,
+        "duration_seconds": 28.286131,
+        "total_urls_found": 23,
+        "unique_file_size": 0,
+        "content_downloaded": 16,
+        "external_urls_found": 0,
+        "total_pages_scraped": 10,
+        "deduplication_enabled": true,
+        "duplicate_content_skipped": 16,
+        "unique_content_downloaded": 0,
+        "space_saved_by_deduplication": 2864
+      },
+      "pages_count": 10,
+      "files_count": 0,
+      "pages": [
+        {
+          "url": "https://news.ycombinator.com/",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/news",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/newest",
+          "title": "New Links | Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/front",
+          "title": "2025-06-15 front | Hacker News"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "f91997d0-d740-49d1-9d32-4f6770c8d98f",
+      "domain": "news.ycombinator.com",
+      "status": "completed",
+      "created_at": "2025-06-16T11:26:40.168324+00:00",
+      "statistics": {
+        "content_by_type": {
+          "image": 18
+        },
+        "total_file_size": 3222,
+        "duration_seconds": 27.812721,
+        "total_urls_found": 23,
+        "unique_file_size": 0,
+        "content_downloaded": 18,
+        "external_urls_found": 0,
+        "total_pages_scraped": 10,
+        "deduplication_enabled": true,
+        "duplicate_content_skipped": 18,
+        "unique_content_downloaded": 0,
+        "space_saved_by_deduplication": 3222
+      },
+      "pages_count": 10,
+      "files_count": 0,
+      "pages": [
+        {
+          "url": "https://news.ycombinator.com/",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/news",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/newest",
+          "title": "New Links | Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/front",
+          "title": "2025-06-15 front | Hacker News"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "5ecc690e-e290-411a-a9b1-e2a198bbc057",
+      "domain": "news.ycombinator.com",
+      "status": "completed",
+      "created_at": "2025-06-16T11:26:21.261237+00:00",
+      "statistics": {
+        "content_by_type": {
+          "image": 18
+        },
+        "total_file_size": 3222,
+        "duration_seconds": 27.091696,
+        "total_urls_found": 23,
+        "unique_file_size": 0,
+        "content_downloaded": 18,
+        "external_urls_found": 0,
+        "total_pages_scraped": 10,
+        "deduplication_enabled": true,
+        "duplicate_content_skipped": 18,
+        "unique_content_downloaded": 0,
+        "space_saved_by_deduplication": 3222
+      },
+      "pages_count": 10,
+      "files_count": 0,
+      "pages": [
+        {
+          "url": "https://news.ycombinator.com/",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/news",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/newest",
+          "title": "New Links | Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/front",
+          "title": "2025-06-15 front | Hacker News"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "c535363c-44b5-4847-8c32-5f6277d0cfa1",
+      "domain": "news.ycombinator.com",
+      "status": "completed",
+      "created_at": "2025-06-16T11:22:21.515617+00:00",
+      "statistics": {
+        "content_by_type": {
+          "image": 18
+        },
+        "total_file_size": 3222,
+        "duration_seconds": 26.879239,
+        "total_urls_found": 23,
+        "unique_file_size": 0,
+        "content_downloaded": 18,
+        "external_urls_found": 0,
+        "total_pages_scraped": 10,
+        "deduplication_enabled": true,
+        "duplicate_content_skipped": 18,
+        "unique_content_downloaded": 0,
+        "space_saved_by_deduplication": 3222
+      },
+      "pages_count": 10,
+      "files_count": 0,
+      "pages": [
+        {
+          "url": "https://news.ycombinator.com/",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/news",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/newest",
+          "title": "New Links | Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/front",
+          "title": "2025-06-15 front | Hacker News"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "23ba5811-c7e6-4a96-ba51-d07cc8bcbe4f",
+      "domain": "news.ycombinator.com",
+      "status": "completed",
+      "created_at": "2025-06-16T11:03:30.414073+00:00",
+      "statistics": {
+        "content_by_type": {
+          "pdf": 1,
+          "image": 16
+        },
+        "total_file_size": 133128,
+        "duration_seconds": 27.45813,
+        "total_urls_found": 23,
+        "unique_file_size": 130264,
+        "content_downloaded": 17,
+        "external_urls_found": 0,
+        "total_pages_scraped": 10,
+        "deduplication_enabled": true,
+        "duplicate_content_skipped": 16,
+        "unique_content_downloaded": 1,
+        "space_saved_by_deduplication": 2864
+      },
+      "pages_count": 10,
+      "files_count": 1,
+      "pages": [
+        {
+          "url": "https://news.ycombinator.com/",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/news",
+          "title": "Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/newest",
+          "title": "New Links | Hacker News"
+        },
+        {
+          "url": "https://news.ycombinator.com/front",
+          "title": "2025-06-15 front | Hacker News"
+        }
+      ],
+      "files": [
+        {
+          "name": "tb107reviews-zapfhallmark.pdf",
+          "type": "application/pdf",
+          "size": 130264
+        }
+      ]
+    }
+  ],
+  "total_sessions": 6,
+  "total_pages": 60,
+  "total_files": 1,
+  "timestamp": "2025-06-16T21:36:55.013103"
+}

@@ -1,23 +1,39 @@
 import React from 'react';
-import { Home, History, Settings, FileText, Image, Video, Download } from 'lucide-react';
+import { Home, History, Settings, FileText, Image, Video, Download, MessageSquare, Database, Search } from 'lucide-react';
 import { useScrapingStore } from '../../store/scrapingStore';
 import { useUIStore } from '../../store/uiStore';
 import { Button } from '../common/Button';
 
-export const Sidebar: React.FC = () => {
+type Page = 'dashboard' | 'search' | 'settings' | 'sessions' | 'files' | 'chat';
+
+interface SidebarProps {
+  currentPage: Page;
+  onPageChange: (page: Page) => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
   const { activeTab, setActiveTab } = useScrapingStore();
   const { toggleSidebar } = useUIStore();
   const { currentSession } = useScrapingStore();
 
-  const navigationItems = [
+  // Main navigation pages
+  const mainPages = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
+    { id: 'search', label: 'Search', icon: Search },
+    { id: 'chat', label: 'Chat Assistant', icon: MessageSquare },
+    { id: 'sessions', label: 'Sessions', icon: Database },
+    { id: 'files', label: 'Files', icon: FileText },
+    { id: 'settings', label: 'Settings', icon: Settings },
+  ];
+
+  // Content navigation (only shown when on dashboard)
+  const contentTabs = [
     { id: 'urls', label: 'Pages', icon: FileText },
     { id: 'images', label: 'Images', icon: Image },
     { id: 'pdfs', label: 'PDFs', icon: FileText },
     { id: 'videos', label: 'Videos', icon: Video },
     { id: 'downloads', label: 'Downloads', icon: Download },
     { id: 'history', label: 'History', icon: History },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   const getContentCount = (type: string) => {
@@ -49,43 +65,90 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-2">
-        {navigationItems.map((item) => {
-          const Icon = item.icon;
-          const count = getContentCount(item.id);
-          const isActive = activeTab === item.id;
+      <nav className="flex-1 px-4 py-6 space-y-6">
+        {/* Main Pages */}
+        <div className="space-y-2">
+          <h3 className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            Main
+          </h3>
+          {mainPages.map((page) => {
+            const Icon = page.icon;
+            const isActive = currentPage === page.id;
 
-          return (
-            <Button
-              key={item.id}
-              variant={isActive ? 'primary' : 'ghost'}
-              className={`w-full justify-start ${
-                isActive 
-                  ? 'bg-blue-600 text-white' 
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-              onClick={() => {
-                setActiveTab(item.id);
-                // Close sidebar on mobile after selection
-                if (window.innerWidth < 1024) {
-                  toggleSidebar();
-                }
-              }}
-            >
-              <Icon size={18} className="mr-3" />
-              <span className="flex-1 text-left">{item.label}</span>
-              {count > 0 && (
-                <span className={`px-2 py-1 text-xs rounded-full ${
-                  isActive 
-                    ? 'bg-white bg-opacity-20 text-white' 
-                    : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
-                }`}>
-                  {count}
-                </span>
-              )}
-            </Button>
-          );
-        })}
+            return (
+              <Button
+                key={page.id}
+                variant={isActive ? 'primary' : 'ghost'}
+                className={`w-full justify-start ${
+                  isActive
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                onClick={() => {
+                  onPageChange(page.id as Page);
+                  // If navigating to dashboard, set the active tab to dashboard
+                  if (page.id === 'dashboard') {
+                    setActiveTab('dashboard');
+                  }
+                  // Close sidebar on mobile after selection
+                  if (window.innerWidth < 1024) {
+                    toggleSidebar();
+                  }
+                }}
+              >
+                <Icon size={18} className="mr-3" />
+                <span className="flex-1 text-left">{page.label}</span>
+              </Button>
+            );
+          })}
+        </div>
+
+        {/* Content Tabs (show when there's a session) */}
+        {currentSession && (
+          <div className="space-y-2">
+            <h3 className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Content
+            </h3>
+            {contentTabs.map((tab) => {
+              const Icon = tab.icon;
+              const count = getContentCount(tab.id);
+              const isActive = activeTab === tab.id;
+
+              return (
+                <Button
+                  key={tab.id}
+                  variant={isActive ? 'secondary' : 'ghost'}
+                  className={`w-full justify-start ${
+                    isActive
+                      ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                  onClick={() => {
+                    // Navigate to dashboard page and set the active tab
+                    onPageChange('dashboard');
+                    setActiveTab(tab.id);
+                    // Close sidebar on mobile after selection
+                    if (window.innerWidth < 1024) {
+                      toggleSidebar();
+                    }
+                  }}
+                >
+                  <Icon size={16} className="mr-3" />
+                  <span className="flex-1 text-left">{tab.label}</span>
+                  {count > 0 && (
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      isActive
+                        ? 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                        : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-400'
+                    }`}>
+                      {count}
+                    </span>
+                  )}
+                </Button>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {/* Session info */}

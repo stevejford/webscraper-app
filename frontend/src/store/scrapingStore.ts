@@ -1,7 +1,10 @@
-// Scraping state management with Zustand
+// Enhanced scraping state management with Zustand following realtime.md recommendations
 
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { supabaseService } from '../services/supabase';
+import { storageService } from '../services/storage';
+import { sessionManager, type EnhancedSession } from '../services/sessionManager';
 import type {
   ScrapeSession,
   ScrapeRequest,
@@ -9,10 +12,8 @@ import type {
   ScrapeResult,
   ScrapedContent,
   ConnectionState,
-  ContentType
 } from '../types';
 import { DEFAULT_CONTENT_TYPES } from '../utils';
-import { storageService } from '../services';
 
 interface ScrapingState {
   // Current session
@@ -55,7 +56,7 @@ interface ScrapingState {
   addSession: (session: ScrapeSession) => void;
   updateSession: (sessionId: string, updates: Partial<ScrapeSession>) => void;
   removeSession: (sessionId: string) => void;
-  loadSessions: () => void;
+  loadSessions: () => Promise<void>;
   
   // Status and content actions
   updateSessionStatus: (status: ScrapeStatus) => void;
@@ -64,11 +65,19 @@ interface ScrapingState {
   
   // Content management actions
   setSelectedContent: (content: ScrapedContent[]) => void;
-  updateContentFilters: (filters: Partial<typeof contentFilters>) => void;
+  updateContentFilters: (filters: Partial<{
+    search: string;
+    type: string;
+    status: 'all' | 'success' | 'error';
+  }>) => void;
   
   // UI actions
   setActiveTab: (tab: string) => void;
   setViewMode: (mode: 'grid' | 'list') => void;
+
+  // Emergency cleanup actions
+  clearCurrentSession: () => void;
+  resetAllSessions: () => void;
 }
 
 const defaultFormData: ScrapeRequest = {
@@ -85,7 +94,7 @@ const defaultFormData: ScrapeRequest = {
 };
 
 export const useScrapingStore = create<ScrapingState>()(
-  immer((set, get) => ({
+  immer((set) => ({
     // Initial state
     currentSession: null,
     isSubmitting: false,
@@ -107,14 +116,29 @@ export const useScrapingStore = create<ScrapingState>()(
       status: 'all',
     },
     
-    activeTab: 'stats',
+    activeTab: 'dashboard',
     viewMode: 'grid',
     
     // Session management
     setCurrentSession: (session) => set((state) => {
+      console.log('💾 Setting current session:', session?.id);
       state.currentSession = session;
+
       if (session) {
+        // Add to sessions list if not already there
+        const existingIndex = state.sessions.findIndex(s => s.id === session.id);
+        if (existingIndex === -1) {
+          state.sessions.unshift(session);
+          console.log('➕ Added new session to sessions list');
+        } else {
+          state.sessions[existingIndex] = session;
+          console.log('📝 Updated existing session in sessions list');
+        }
+
+        // Save to storage
         storageService.saveLastSession(session.id);
+        storageService.addSession(session);
+        console.log('💾 Saved session to localStorage');
       }
     }),
     
@@ -172,25 +196,107 @@ export const useScrapingStore = create<ScrapingState>()(
       }
     }),
     
-    loadSessions: () => set((state) => {
-      const savedSessions = storageService.getSessions();
-      state.sessions = savedSessions;
-      
-      // Load last session if available
-      const lastSessionId = storageService.getLastSession();
-      if (lastSessionId) {
-        const lastSession = savedSessions.find(s => s.id === lastSessionId);
-        if (lastSession) {
-          state.currentSession = lastSession;
-        }
+    loadSessions: async () => {
+      console.log('📂 Loading sessions from Supabase and localStorage...');
+
+      try {
+        // Fetch sessions from Supabase
+        const supabaseSessions = await supabaseService.getSessions();
+        console.log('📊 Loaded sessions from Supabase:', supabaseSessions.length);
+
+        // Also load from localStorage for offline sessions
+        const localSessions = storageService.getSessions();
+        console.log('📊 Loaded sessions from localStorage:', localSessions.length);
+
+        // Merge sessions (Supabase takes priority)
+        const allSessions = [...supabaseSessions];
+
+        // Add local sessions that aren't in Supabase
+        localSessions.forEach(localSession => {
+          if (!allSessions.find(s => s.id === localSession.id)) {
+            allSessions.push(localSession);
+          }
+        });
+
+        console.log('📊 Total merged sessions:', allSessions.length);
+
+        set((state) => {
+          state.sessions = allSessions;
+
+          // Load best session (prefer sessions with content, then last session)
+          const lastSessionId = storageService.getLastSession();
+          console.log('🔍 Last session ID from storage:', lastSessionId);
+
+          // First try to find a session with content
+          const sessionWithContent = allSessions.find(s =>
+            s.result?.scraped_content && s.result.scraped_content.length > 0
+          );
+
+          if (sessionWithContent) {
+            state.currentSession = sessionWithContent;
+            console.log('✅ Loaded session with content:', sessionWithContent.id);
+            console.log('📊 Session has result:', !!sessionWithContent.result);
+            console.log('📊 Session content count:', sessionWithContent.result?.scraped_content?.length || 0);
+          } else if (lastSessionId) {
+            const lastSession = allSessions.find(s => s.id === lastSessionId);
+            if (lastSession) {
+              state.currentSession = lastSession;
+              console.log('✅ Loaded last session:', lastSession.id);
+              console.log('📊 Last session has result:', !!lastSession.result);
+              console.log('📊 Last session content count:', lastSession.result?.scraped_content?.length || 0);
+            } else {
+              console.warn('⚠️ Last session ID found but session not in list');
+            }
+          } else {
+            console.log('ℹ️ No last session ID in storage, trying first available session');
+            if (allSessions.length > 0) {
+              state.currentSession = allSessions[0];
+              console.log('✅ Loaded first available session:', allSessions[0].id);
+            }
+          }
+
+          // Load saved form data
+          const savedFormData = storageService.getFormData();
+          if (savedFormData) {
+            state.formData = { ...defaultFormData, ...savedFormData };
+          }
+        });
+
+      } catch (error) {
+        console.error('❌ Failed to load sessions from Supabase:', error);
+
+        // Fallback to localStorage only
+        set((state) => {
+          console.log('📂 Falling back to localStorage...');
+          const savedSessions = storageService.getSessions();
+          console.log('📊 Fallback sessions count:', savedSessions.length);
+          state.sessions = savedSessions;
+
+          // Load last session if available
+          const lastSessionId = storageService.getLastSession();
+          console.log('🔍 Last session ID from storage:', lastSessionId);
+          if (lastSessionId) {
+            const lastSession = savedSessions.find(s => s.id === lastSessionId);
+            if (lastSession) {
+              state.currentSession = lastSession;
+              console.log('✅ Loaded last session:', lastSession.id);
+              console.log('📊 Last session has result:', !!lastSession.result);
+              console.log('📊 Last session content count:', lastSession.result?.scraped_content?.length || 0);
+            } else {
+              console.warn('⚠️ Last session ID found but session not in list');
+            }
+          } else {
+            console.log('ℹ️ No last session ID in storage');
+          }
+
+          // Load saved form data
+          const savedFormData = storageService.getFormData();
+          if (savedFormData) {
+            state.formData = { ...defaultFormData, ...savedFormData };
+          }
+        });
       }
-      
-      // Load saved form data
-      const savedFormData = storageService.getFormData();
-      if (savedFormData) {
-        state.formData = { ...defaultFormData, ...savedFormData };
-      }
-    }),
+    },
     
     // Real-time updates
     updateSessionStatus: (status) => set((state) => {
@@ -275,28 +381,41 @@ export const useScrapingStore = create<ScrapingState>()(
     }),
     
     completeSession: (result) => set((state) => {
+      console.log('💾 Completing session with result:', result);
+      console.log('📊 Content items in result:', result.scraped_content?.length || 0);
+      console.log('📄 Page contents in result:', result.page_contents?.length || 0);
+
       if (state.currentSession) {
         state.currentSession.result = result;
         state.currentSession.status = result.status;
         state.currentSession.updated_at = new Date().toISOString();
-        
+
         // Update in sessions list
         const sessionIndex = state.sessions.findIndex(s => s.id === result.session_id);
         if (sessionIndex !== -1) {
           state.sessions[sessionIndex] = { ...state.currentSession };
+          console.log('📝 Updated existing session in list');
         } else {
           // Add to sessions if not found
           state.sessions.unshift(state.currentSession);
+          console.log('➕ Added new session to list');
         }
-        
+
         // Save to storage
         storageService.updateSession(result.session_id, {
           result,
           status: result.status,
           updated_at: new Date().toISOString(),
         });
+        console.log('💾 Saved session to localStorage');
+
+        // Also save the complete sessions list
+        storageService.saveSessions(state.sessions);
+        console.log('💾 Saved sessions list to localStorage');
+      } else {
+        console.warn('⚠️ No current session to complete!');
       }
-      
+
       state.isSubmitting = false;
     }),
     
@@ -317,6 +436,154 @@ export const useScrapingStore = create<ScrapingState>()(
     setViewMode: (mode) => set((state) => {
       state.viewMode = mode;
     }),
+
+    // Emergency session cleanup
+    clearCurrentSession: () => set((state) => {
+      console.log('🧹 Clearing current session');
+      state.currentSession = null;
+      state.isSubmitting = false;
+      storageService.removeItem('LAST_SESSION');
+      console.log('✅ Current session cleared');
+    }),
+
+    // Reset all sessions and storage
+    resetAllSessions: () => set((state) => {
+      console.log('🧹 Resetting all sessions and storage');
+      state.currentSession = null;
+      state.sessions = [];
+      state.isSubmitting = false;
+      storageService.clearAllData();
+      console.log('✅ All sessions and storage cleared');
+    }),
+
+    // Enhanced session management methods following realtime.md recommendations
+
+    createEnhancedSession: async (request: ScrapeRequest) => {
+      try {
+        console.log('🚀 Creating enhanced session with sessionManager...');
+        const enhancedSession = await sessionManager.createSession(request);
+
+        // Convert to legacy format for store compatibility
+        const legacySession = sessionManager['convertToLegacyFormat'](enhancedSession);
+
+        set((state) => {
+          state.currentSession = legacySession;
+          state.sessions.unshift(legacySession);
+        });
+
+        console.log('✅ Enhanced session created:', enhancedSession.id);
+        return enhancedSession;
+      } catch (error) {
+        console.error('❌ Failed to create enhanced session:', error);
+        throw error;
+      }
+    },
+
+    transitionSessionState: async (sessionId: string, newStatus: string, progressUpdate?: any) => {
+      try {
+        console.log('🔄 Transitioning session state:', sessionId, newStatus);
+        const success = await sessionManager.transitionSessionState(sessionId, newStatus as any, progressUpdate);
+
+        if (success) {
+          const enhancedSession = sessionManager.getSession(sessionId);
+          if (enhancedSession) {
+            const legacySession = sessionManager['convertToLegacyFormat'](enhancedSession);
+
+            set((state) => {
+              // Update current session if it matches
+              if (state.currentSession?.id === sessionId) {
+                state.currentSession = legacySession;
+              }
+
+              // Update in sessions list
+              const sessionIndex = state.sessions.findIndex(s => s.id === sessionId);
+              if (sessionIndex !== -1) {
+                state.sessions[sessionIndex] = legacySession;
+              }
+            });
+          }
+        }
+
+        return success;
+      } catch (error) {
+        console.error('❌ Failed to transition session state:', error);
+        return false;
+      }
+    },
+
+    checkpointSessionProgress: async (sessionId: string, progress: any) => {
+      try {
+        console.log('📍 Checkpointing session progress:', sessionId);
+        await sessionManager.checkpointProgress(sessionId, progress);
+
+        const enhancedSession = sessionManager.getSession(sessionId);
+        if (enhancedSession) {
+          const legacySession = sessionManager['convertToLegacyFormat'](enhancedSession);
+
+          set((state) => {
+            // Update current session if it matches
+            if (state.currentSession?.id === sessionId) {
+              state.currentSession = legacySession;
+            }
+
+            // Update in sessions list
+            const sessionIndex = state.sessions.findIndex(s => s.id === sessionId);
+            if (sessionIndex !== -1) {
+              state.sessions[sessionIndex] = legacySession;
+            }
+          });
+        }
+
+        console.log('✅ Session progress checkpointed');
+      } catch (error) {
+        console.error('❌ Failed to checkpoint session progress:', error);
+      }
+    },
+
+    resumeInterruptedSession: async (sessionId: string) => {
+      try {
+        console.log('🔄 Resuming interrupted session:', sessionId);
+        const enhancedSession = await sessionManager.resumeSession(sessionId);
+
+        if (enhancedSession) {
+          const legacySession = sessionManager['convertToLegacyFormat'](enhancedSession);
+
+          set((state) => {
+            state.currentSession = legacySession;
+
+            // Update in sessions list
+            const sessionIndex = state.sessions.findIndex(s => s.id === sessionId);
+            if (sessionIndex !== -1) {
+              state.sessions[sessionIndex] = legacySession;
+            } else {
+              state.sessions.unshift(legacySession);
+            }
+          });
+
+          console.log('✅ Session resumed successfully');
+          return enhancedSession;
+        }
+
+        console.warn('⚠️ Failed to resume session - session not found or invalid state');
+        return null;
+      } catch (error) {
+        console.error('❌ Failed to resume interrupted session:', error);
+        return null;
+      }
+    },
+
+    loadInterruptedSessions: async () => {
+      try {
+        console.log('🔍 Loading interrupted sessions...');
+        const interruptedSessions = await supabaseService.getInterruptedSessions();
+
+        console.log(`📊 Found ${interruptedSessions.length} interrupted sessions`);
+        return interruptedSessions;
+      } catch (error) {
+        console.error('❌ Failed to load interrupted sessions:', error);
+        return [];
+      }
+    },
   }))
 );
 

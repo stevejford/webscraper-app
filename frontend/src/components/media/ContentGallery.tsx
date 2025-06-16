@@ -56,10 +56,63 @@ export const ContentGallery: React.FC<ContentGalleryProps> = ({
     }
   };
 
-  const handleBulkDownload = () => {
+  const handleBulkDownload = async () => {
     const selectedContent = content.filter(item => selectedItems.has(item.url));
-    // TODO: Implement bulk download functionality
-    console.log('Bulk download:', selectedContent);
+    const { currentSession } = useScrapingStore.getState();
+
+    if (!currentSession || selectedContent.length === 0) return;
+
+    try {
+      // Create a zip file with all selected content
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+
+      let downloadCount = 0;
+
+      for (const item of selectedContent) {
+        if (item.success) {
+          try {
+            // Get download URL - prefer public_url, fall back to API endpoint
+            let downloadUrl = '';
+            if (item.public_url) {
+              downloadUrl = item.public_url;
+            } else if (item.file_path) {
+              downloadUrl = `/api/content/${currentSession.id}/${item.file_path}`;
+            }
+
+            if (downloadUrl) {
+              const response = await fetch(downloadUrl);
+              if (response.ok) {
+                const blob = await response.blob();
+                const filename = item.title || item.filename || item.file_path?.split('/').pop() || `file_${downloadCount}`;
+                zip.file(filename, blob);
+                downloadCount++;
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to download ${item.url}:`, error);
+          }
+        }
+      }
+
+      if (downloadCount > 0) {
+        // Generate and download the zip file
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `scraped-content-${currentSession.domain}-${Date.now()}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        // Clear selection
+        setSelectedItems(new Set());
+      }
+    } catch (error) {
+      console.error('Bulk download failed:', error);
+    }
   };
 
   const getContentTypeLabel = () => {
@@ -197,9 +250,9 @@ export const ContentGallery: React.FC<ContentGalleryProps> = ({
                 ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'
                 : 'space-y-2'
             }>
-              {content.map((item) => (
+              {content.map((item, index) => (
                 <ContentItem
-                  key={item.url}
+                  key={item.id || `${item.url}-${index}`}
                   content={item}
                   viewMode={viewMode}
                   selected={selectedItems.has(item.url)}

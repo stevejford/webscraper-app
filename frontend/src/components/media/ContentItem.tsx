@@ -38,8 +38,14 @@ export const ContentItem: React.FC<ContentItemProps> = ({
   };
 
   const getThumbnail = () => {
-    if (content.content_type === 'image' && content.file_path && currentSession) {
-      return apiService.getContentFileUrl(currentSession.id, content.file_path);
+    if (content.content_type === 'image') {
+      // Use public_url if available, otherwise fall back to API endpoint
+      if (content.public_url) {
+        return content.public_url;
+      }
+      if (content.file_path && currentSession) {
+        return apiService.getContentFileUrl(currentSession.id, content.file_path);
+      }
     }
     if (content.thumbnail) {
       return content.thumbnail;
@@ -49,10 +55,19 @@ export const ContentItem: React.FC<ContentItemProps> = ({
 
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (content.file_path && currentSession) {
+
+    // Use public_url if available, otherwise fall back to API endpoint
+    let downloadUrl = '';
+    if (content.public_url) {
+      downloadUrl = content.public_url;
+    } else if (content.file_path && currentSession) {
+      downloadUrl = apiService.getContentFileUrl(currentSession.id, content.file_path);
+    }
+
+    if (downloadUrl) {
       const link = document.createElement('a');
-      link.href = apiService.getContentFileUrl(currentSession.id, content.file_path);
-      link.download = content.title || content.url.split('/').pop() || 'download';
+      link.href = downloadUrl;
+      link.download = content.title || content.filename || content.url.split('/').pop() || 'download';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

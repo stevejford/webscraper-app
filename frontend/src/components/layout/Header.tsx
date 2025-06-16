@@ -1,15 +1,22 @@
-import React from 'react';
-import { Menu, X, Sun, Moon, Settings, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { Menu, X, Sun, Moon, Settings, Download, Search } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useScrapingStore } from '../../store/scrapingStore';
 import { Button } from '../common/Button';
+import { Input } from '../common/Input';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  onNavigateToSettings?: () => void;
+  onNavigateToSearch?: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ onNavigateToSettings, onNavigateToSearch }) => {
   const { sidebarOpen, toggleSidebar, theme, toggleTheme } = useUIStore();
-  const { currentSession } = useScrapingStore();
+  const { currentSession, updateContentFilters } = useScrapingStore();
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
-  // Debug: Log the currentSession to see its structure
-  console.log('Header currentSession:', currentSession);
+
 
   const handleExportSession = () => {
     if (currentSession) {
@@ -23,6 +30,15 @@ export const Header: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleGlobalSearch = (query: string) => {
+    if (query.trim()) {
+      updateContentFilters({ search: query });
+      onNavigateToSearch?.();
+      setShowGlobalSearch(false);
+      setGlobalSearchQuery('');
     }
   };
 
@@ -50,16 +66,74 @@ export const Header: React.FC = () => {
           </div>
         </div>
 
-        {/* Center - Session status */}
-        {currentSession && (
-          <div className="hidden md:flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-            <div className="w-2 h-2 rounded-full bg-green-500" />
-            <span>Session: Active</span>
-          </div>
-        )}
+        {/* Center - Global Search */}
+        <div className="hidden md:flex flex-1 max-w-md mx-8">
+          {showGlobalSearch ? (
+            <div className="flex w-full space-x-2">
+              <Input
+                type="text"
+                placeholder="Search all content..."
+                value={globalSearchQuery}
+                onChange={(e) => setGlobalSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleGlobalSearch(globalSearchQuery)}
+                className="flex-1"
+                autoFocus
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleGlobalSearch(globalSearchQuery)}
+                disabled={!globalSearchQuery.trim()}
+              >
+                <Search size={16} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowGlobalSearch(false);
+                  setGlobalSearchQuery('');
+                }}
+              >
+                <X size={16} />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center">
+              {currentSession && (
+                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span>Session: Active</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Right side - Actions */}
         <div className="flex items-center space-x-2">
+          {/* Mobile search button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowGlobalSearch(!showGlobalSearch)}
+            className="md:hidden"
+            title="Search"
+          >
+            <Search size={16} />
+          </Button>
+
+          {/* Desktop search button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowGlobalSearch(!showGlobalSearch)}
+            className="hidden md:flex"
+            title="Search"
+          >
+            <Search size={16} />
+          </Button>
+
           {currentSession && (
             <Button
               variant="ghost"
@@ -71,7 +145,7 @@ export const Header: React.FC = () => {
               Export
             </Button>
           )}
-          
+
           <Button
             variant="ghost"
             size="sm"
@@ -79,10 +153,12 @@ export const Header: React.FC = () => {
           >
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </Button>
-          
+
           <Button
             variant="ghost"
             size="sm"
+            onClick={onNavigateToSettings}
+            title="Settings"
           >
             <Settings size={16} />
           </Button>

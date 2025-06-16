@@ -116,22 +116,160 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 # Wait a bit more
                 await asyncio.sleep(2)
                 
+                # Generate realistic mock content
+                domain = url.split('/')[2] if '/' in url else url
+                mock_content = [
+                    {
+                        "id": f"content_1_{session_id[:8]}",
+                        "url": f"{url}/image1.jpg",
+                        "content_type": "image",
+                        "file_name": "hero-banner.jpg",
+                        "file_size": 245760,
+                        "mime_type": "image/jpeg",
+                        "downloaded_at": datetime.now().isoformat(),
+                        "local_path": f"/downloads/{session_id}/images/hero-banner.jpg",
+                        "metadata": {
+                            "width": 1920,
+                            "height": 1080,
+                            "alt_text": "Hero banner image"
+                        }
+                    },
+                    {
+                        "id": f"content_2_{session_id[:8]}",
+                        "url": f"{url}/document.pdf",
+                        "content_type": "pdf",
+                        "file_name": "whitepaper.pdf",
+                        "file_size": 1048576,
+                        "mime_type": "application/pdf",
+                        "downloaded_at": datetime.now().isoformat(),
+                        "local_path": f"/downloads/{session_id}/pdfs/whitepaper.pdf",
+                        "metadata": {
+                            "pages": 12,
+                            "title": "Technical Whitepaper"
+                        }
+                    },
+                    {
+                        "id": f"content_3_{session_id[:8]}",
+                        "url": f"{url}/logo.png",
+                        "content_type": "image",
+                        "file_name": "company-logo.png",
+                        "file_size": 32768,
+                        "mime_type": "image/png",
+                        "downloaded_at": datetime.now().isoformat(),
+                        "local_path": f"/downloads/{session_id}/images/company-logo.png",
+                        "metadata": {
+                            "width": 200,
+                            "height": 100,
+                            "alt_text": "Company logo"
+                        }
+                    },
+                    {
+                        "id": f"content_4_{session_id[:8]}",
+                        "url": f"{url}/video.mp4",
+                        "content_type": "video",
+                        "file_name": "demo-video.mp4",
+                        "file_size": 5242880,
+                        "mime_type": "video/mp4",
+                        "downloaded_at": datetime.now().isoformat(),
+                        "local_path": f"/downloads/{session_id}/videos/demo-video.mp4",
+                        "metadata": {
+                            "duration": 120,
+                            "resolution": "1280x720"
+                        }
+                    },
+                    {
+                        "id": f"content_5_{session_id[:8]}",
+                        "url": f"{url}/data.csv",
+                        "content_type": "document",
+                        "file_name": "export-data.csv",
+                        "file_size": 16384,
+                        "mime_type": "text/csv",
+                        "downloaded_at": datetime.now().isoformat(),
+                        "local_path": f"/downloads/{session_id}/documents/export-data.csv",
+                        "metadata": {
+                            "rows": 500,
+                            "columns": 8
+                        }
+                    }
+                ]
+
+                # Generate page contents
+                page_contents = [
+                    {
+                        "id": f"page_1_{session_id[:8]}",
+                        "url": url,
+                        "title": f"Homepage - {domain}",
+                        "content": f"Welcome to {domain}. This is the main page with lots of interesting content about our services and products.",
+                        "scraped_at": datetime.now().isoformat(),
+                        "word_count": 250,
+                        "links_found": 15,
+                        "images_found": 3,
+                        "metadata": {
+                            "description": f"Main page of {domain}",
+                            "keywords": ["homepage", "services", "products"]
+                        }
+                    },
+                    {
+                        "id": f"page_2_{session_id[:8]}",
+                        "url": f"{url}/about",
+                        "title": f"About Us - {domain}",
+                        "content": f"Learn more about {domain} and our mission to provide excellent services to our customers.",
+                        "scraped_at": datetime.now().isoformat(),
+                        "word_count": 180,
+                        "links_found": 8,
+                        "images_found": 2,
+                        "metadata": {
+                            "description": f"About page for {domain}",
+                            "keywords": ["about", "company", "mission"]
+                        }
+                    },
+                    {
+                        "id": f"page_3_{session_id[:8]}",
+                        "url": f"{url}/contact",
+                        "title": f"Contact - {domain}",
+                        "content": f"Get in touch with {domain}. We'd love to hear from you and answer any questions.",
+                        "scraped_at": datetime.now().isoformat(),
+                        "word_count": 120,
+                        "links_found": 5,
+                        "images_found": 1,
+                        "metadata": {
+                            "description": f"Contact information for {domain}",
+                            "keywords": ["contact", "support", "help"]
+                        }
+                    }
+                ]
+
                 # Send completion message
                 await websocket.send_text(json.dumps({
                     "type": "scrape_complete",
                     "data": {
                         "session_id": session_id,
-                        "domain": url.split('/')[2] if '/' in url else url,
-                        "urls": [url, f"{url}/page1", f"{url}/page2"],
+                        "domain": domain,
+                        "urls": [url, f"{url}/about", f"{url}/contact"],
                         "external_urls": [f"https://external1.com", f"https://external2.com"],
-                        "scraped_content": [],
+                        "scraped_content": mock_content,
+                        "page_contents": page_contents,
+                        "statistics": {
+                            "total_pages_scraped": 3,
+                            "total_urls_found": 15,
+                            "external_urls_found": 7,
+                            "content_downloaded": 5,
+                            "content_by_type": {
+                                "image": 2,
+                                "pdf": 1,
+                                "video": 1,
+                                "document": 1
+                            },
+                            "total_file_size": 6635520,
+                            "duration_seconds": 8
+                        },
                         "status": {
                             "session_id": session_id,
                             "status": "completed",
-                            "pages_scraped": 5,
+                            "pages_scraped": 3,
                             "urls_found": 15,
                             "external_urls_found": 7,
-                            "content_downloaded": 3,
+                            "content_downloaded": 5,
                             "progress": 100.0,
                             "started_at": datetime.now().isoformat(),
                             "ended_at": datetime.now().isoformat()

@@ -22,18 +22,24 @@ export interface ContentType {
 }
 
 export interface ScrapedContent {
+  id?: string;
   url: string;
   content_type: 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio' | 'other';
   file_path?: string;
+  filename?: string;
   file_size?: number;
+  size?: number; // Alias for file_size
+  type?: string; // Alias for mime_type
   mime_type?: string;
   title?: string;
   description?: string;
   text_content?: string;
   thumbnail?: string;
+  public_url?: string; // Supabase Storage public URL
   downloaded_at: string;
   success: boolean;
   error?: string;
+  metadata?: any;
   // New context fields
   source_page_url?: string;
   alt_text?: string;

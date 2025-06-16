@@ -14,8 +14,8 @@ interface Config {
 
 // Environment configuration
 export const config: Config = {
-  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-  WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000',
+  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001',
+  WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8001',
   MAX_FILE_SIZE: parseInt(import.meta.env.VITE_MAX_FILE_SIZE || '50000000'), // 50MB
   RECONNECT_ATTEMPTS: parseInt(import.meta.env.VITE_RECONNECT_ATTEMPTS || '5'),
   HEARTBEAT_INTERVAL: parseInt(import.meta.env.VITE_HEARTBEAT_INTERVAL || '30000'), // 30 seconds
@@ -176,6 +176,8 @@ export const API_ENDPOINTS = {
   SESSIONS: '/api/scrape/sessions',
   STATUS: (sessionId: string) => `/api/scrape/status/${sessionId}`,
   RESULT: (sessionId: string) => `/api/scrape/result/${sessionId}`,
+  PAUSE: (sessionId: string) => `/api/scrape/pause/${sessionId}`,
+  RESUME: (sessionId: string) => `/api/scrape/resume/${sessionId}`,
   STOP: (sessionId: string) => `/api/scrape/stop/${sessionId}`,
   WEBSOCKET: (sessionId: string) => `/ws/scrape/${sessionId}`,
 };

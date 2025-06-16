@@ -76,6 +76,20 @@ class ApiService {
     return this.request<ScrapeResult>(API_ENDPOINTS.RESULT(sessionId));
   }
 
+  // Pause scraping session
+  async pauseSession(sessionId: string): Promise<ApiResponse<{ message: string; session_id: string }>> {
+    return this.request(API_ENDPOINTS.PAUSE(sessionId), {
+      method: 'POST',
+    });
+  }
+
+  // Resume scraping session
+  async resumeSession(sessionId: string): Promise<ApiResponse<{ message: string; session_id: string }>> {
+    return this.request(API_ENDPOINTS.RESUME(sessionId), {
+      method: 'POST',
+    });
+  }
+
   // Stop scraping session
   async stopSession(sessionId: string): Promise<ApiResponse<{ message: string; session_id: string }>> {
     return this.request(API_ENDPOINTS.STOP(sessionId), {

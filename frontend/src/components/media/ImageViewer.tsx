@@ -27,9 +27,18 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const { currentSession } = useScrapingStore();
 
-  const imageUrl = content.file_path && currentSession
-    ? apiService.getContentFileUrl(currentSession.id, content.file_path)
-    : content.url;
+  const imageUrl = (() => {
+    // Use public_url if available (from Supabase Storage)
+    if (content.public_url) {
+      return content.public_url;
+    }
+    // Fall back to API endpoint if file_path is available
+    if (content.file_path && currentSession) {
+      return apiService.getContentFileUrl(currentSession.id, content.file_path);
+    }
+    // Final fallback to original URL
+    return content.url;
+  })();
 
   useEffect(() => {
     // Reset view when content changes

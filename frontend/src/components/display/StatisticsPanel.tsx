@@ -21,33 +21,52 @@ export const StatisticsPanel: React.FC = () => {
   }
 
   const { statistics } = currentSession.result;
-  
-  // Prepare data for charts
-  const contentTypeData = Object.entries(statistics.content_by_type || {}).map(([type, count]) => ({
+
+  // Prepare data for charts with safe fallbacks
+  const contentByType = statistics?.content_by_type || {};
+  const contentTypeData = Object.entries(contentByType).map(([type, count]) => ({
     name: type.charAt(0).toUpperCase() + type.slice(1),
     value: count,
     count: count,
   }));
 
+  // If no content_by_type data, create mock data based on scraped content
+  const fallbackContentTypeData = contentTypeData.length === 0 && currentSession.result?.scraped_content ?
+    currentSession.result.scraped_content.reduce((acc: any[], item: any) => {
+      const type = item.content_type || 'other';
+      const existing = acc.find(entry => entry.name.toLowerCase() === type);
+      if (existing) {
+        existing.value += 1;
+        existing.count += 1;
+      } else {
+        acc.push({
+          name: type.charAt(0).toUpperCase() + type.slice(1),
+          value: 1,
+          count: 1,
+        });
+      }
+      return acc;
+    }, []) : contentTypeData;
+
   const performanceData = [
     {
       name: 'Pages',
-      value: statistics.total_pages_scraped,
+      value: statistics?.total_pages_scraped || currentSession.status?.pages_scraped || 0,
       color: '#3B82F6',
     },
     {
       name: 'URLs',
-      value: statistics.total_urls_found,
+      value: statistics?.total_urls_found || currentSession.status?.urls_found || 0,
       color: '#10B981',
     },
     {
       name: 'External',
-      value: statistics.external_urls_found,
+      value: statistics?.external_urls_found || currentSession.status?.external_urls_found || 0,
       color: '#F59E0B',
     },
     {
       name: 'Content',
-      value: statistics.content_downloaded,
+      value: statistics?.content_downloaded || currentSession.status?.content_downloaded || 0,
       color: '#8B5CF6',
     },
   ];
@@ -71,28 +90,28 @@ export const StatisticsPanel: React.FC = () => {
   const overviewStats = [
     {
       label: 'Total Pages',
-      value: formatNumber(statistics.total_pages_scraped),
+      value: formatNumber(statistics?.total_pages_scraped || currentSession.status?.pages_scraped || 0),
       icon: Globe,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100 dark:bg-blue-900',
     },
     {
       label: 'URLs Found',
-      value: formatNumber(statistics.total_urls_found),
+      value: formatNumber(statistics?.total_urls_found || currentSession.status?.urls_found || 0),
       icon: TrendingUp,
       color: 'text-green-600',
       bgColor: 'bg-green-100 dark:bg-green-900',
     },
     {
       label: 'Content Downloaded',
-      value: formatNumber(statistics.content_downloaded),
+      value: formatNumber(statistics?.content_downloaded || currentSession.status?.content_downloaded || 0),
       icon: Download,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100 dark:bg-purple-900',
     },
     {
       label: 'Total Size',
-      value: formatFileSize(statistics.total_file_size || 0),
+      value: formatFileSize(statistics?.total_file_size || 0),
       icon: FileText,
       color: 'text-orange-600',
       bgColor: 'bg-orange-100 dark:bg-orange-900',
@@ -160,7 +179,7 @@ export const StatisticsPanel: React.FC = () => {
         </div>
 
         {/* Content Type Distribution */}
-        {contentTypeData.length > 0 && (
+        {fallbackContentTypeData.length > 0 && (
           <div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               Content Distribution
@@ -169,7 +188,7 @@ export const StatisticsPanel: React.FC = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={contentTypeData}
+                    data={fallbackContentTypeData}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
@@ -178,7 +197,7 @@ export const StatisticsPanel: React.FC = () => {
                     fill="#8884d8"
                     dataKey="value"
                   >
-                    {contentTypeData.map((entry, index) => (
+                    {fallbackContentTypeData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -200,13 +219,13 @@ export const StatisticsPanel: React.FC = () => {
       {/* Detailed Breakdown */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Content Types Breakdown */}
-        {contentTypeData.length > 0 && (
+        {fallbackContentTypeData.length > 0 && (
           <div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               Content Types
             </h3>
             <div className="space-y-3">
-              {contentTypeData.map((item, index) => (
+              {fallbackContentTypeData.map((item, index) => (
                 <div key={item.name} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <div className="flex items-center space-x-3">
                     {getContentIcon(item.name)}
@@ -238,34 +257,34 @@ export const StatisticsPanel: React.FC = () => {
             <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <span className="text-sm text-gray-600 dark:text-gray-400">Duration</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                {formatDuration(statistics.duration_seconds)}
+                {formatDuration(statistics?.duration_seconds || 0)}
               </span>
             </div>
-            
+
             <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <span className="text-sm text-gray-600 dark:text-gray-400">Average per Page</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                {statistics.total_pages_scraped > 0 
-                  ? formatDuration(statistics.duration_seconds / statistics.total_pages_scraped)
+                {(statistics?.total_pages_scraped || 0) > 0
+                  ? formatDuration((statistics?.duration_seconds || 0) / (statistics?.total_pages_scraped || 1))
                   : '0s'
                 }
               </span>
             </div>
-            
+
             <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <span className="text-sm text-gray-600 dark:text-gray-400">Success Rate</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                {statistics.total_pages_scraped > 0 
-                  ? Math.round((statistics.content_downloaded / statistics.total_pages_scraped) * 100)
+                {(statistics?.total_pages_scraped || 0) > 0
+                  ? Math.round(((statistics?.content_downloaded || 0) / (statistics?.total_pages_scraped || 1)) * 100)
                   : 0
                 }%
               </span>
             </div>
-            
+
             <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <span className="text-sm text-gray-600 dark:text-gray-400">External Links</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                {formatNumber(statistics.external_urls_found)}
+                {formatNumber(statistics?.external_urls_found || currentSession.status?.external_urls_found || 0)}
               </span>
             </div>
           </div>

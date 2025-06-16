@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Download, ExternalLink, Copy, Filter, SortAsc, SortDesc } from 'lucide-react';
+import { FixedSizeList as List } from 'react-window';
 import { useScrapingStore } from '../../store/scrapingStore';
 import { Button } from '../common/Button';
 import { Input } from '../common/Input';
@@ -8,6 +9,67 @@ import { download } from '../../utils';
 interface ResultsPanelProps {
   contentType: 'urls' | 'external_urls';
 }
+
+// Virtual list item component
+interface URLListItemProps {
+  index: number;
+  style: React.CSSProperties;
+  data: {
+    urls: string[];
+    selectedUrls: Set<string>;
+    onSelectUrl: (url: string, selected: boolean) => void;
+    getDomain: (url: string) => string;
+  };
+}
+
+const URLListItem: React.FC<URLListItemProps> = ({ index, style, data }) => {
+  const { urls, selectedUrls, onSelectUrl, getDomain } = data;
+  const url = urls[index];
+
+  return (
+    <div style={style} className="px-2">
+      <div
+        className={`flex items-center p-3 rounded-lg border transition-colors ${
+          selectedUrls.has(url)
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+            : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+        }`}
+      >
+        <input
+          type="checkbox"
+          checked={selectedUrls.has(url)}
+          onChange={(e) => onSelectUrl(url, e.target.checked)}
+          className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 dark:text-blue-400 hover:underline truncate flex-1 mr-4"
+            >
+              {url}
+            </a>
+
+            <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+              <span className="hidden sm:inline">{getDomain(url)}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => window.open(url, '_blank')}
+                className="text-xs"
+              >
+                <ExternalLink size={12} />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const ResultsPanel: React.FC<ResultsPanelProps> = ({ contentType }) => {
   const { currentSession } = useScrapingStore();
@@ -235,50 +297,21 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ contentType }) => {
               </div>
             </div>
 
-            {/* URL list */}
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {urls.map((url, index) => (
-                <div
-                  key={index}
-                  className={`flex items-center p-3 rounded-lg border transition-colors ${
-                    selectedUrls.has(url)
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                      : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedUrls.has(url)}
-                    onChange={(e) => handleSelectUrl(url, e.target.checked)}
-                    className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 dark:text-blue-400 hover:underline truncate flex-1 mr-4"
-                      >
-                        {url}
-                      </a>
-                      
-                      <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                        <span className="hidden sm:inline">{getDomain(url)}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => window.open(url, '_blank')}
-                          className="text-xs"
-                        >
-                          <ExternalLink size={12} />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            {/* Virtual URL list */}
+            <div className="border border-gray-200 dark:border-gray-600 rounded-lg">
+              <List
+                height={400}
+                itemCount={urls.length}
+                itemSize={80}
+                itemData={{
+                  urls,
+                  selectedUrls,
+                  onSelectUrl: handleSelectUrl,
+                  getDomain
+                }}
+              >
+                {URLListItem}
+              </List>
             </div>
           </>
         )}
